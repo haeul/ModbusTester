@@ -1,22 +1,16 @@
-﻿namespace ModbusTester
+﻿using System;
+using System.Windows.Forms;
+
+namespace ModbusTester
 {
     partial class FormMain : Form
     {
-        /// <summary>
-        /// Required designer variable.
-        /// </summary>
         private System.ComponentModel.IContainer components = null;
 
-        /// <summary>
-        /// Clean up any resources being used.
-        /// </summary>
-        /// <param name="disposing">true if managed resources should be disposed; otherwise, false.</param>
         protected override void Dispose(bool disposing)
         {
             if (disposing && (components != null))
-            {
                 components.Dispose();
-            }
             base.Dispose(disposing);
         }
 
@@ -89,6 +83,7 @@
             btnLogClear = new Button();
             txtLog = new RichTextBox();
             pollTimer = new System.Windows.Forms.Timer(components);
+            chkSlaveMode = new CheckBox();
             grpTx.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numStartRegister).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numCount).BeginInit();
@@ -150,6 +145,7 @@
             btnSend.TabIndex = 28;
             btnSend.Text = "SEND";
             btnSend.UseVisualStyleBackColor = true;
+            btnSend.Click += btnSend_Click;
             // 
             // btnCalcCrc
             // 
@@ -160,6 +156,7 @@
             btnCalcCrc.TabIndex = 27;
             btnCalcCrc.Text = "Calc CRC";
             btnCalcCrc.UseVisualStyleBackColor = true;
+            btnCalcCrc.Click += btnCalcCrc_Click;
             // 
             // label6
             // 
@@ -197,6 +194,7 @@
             numCount.Size = new Size(108, 23);
             numCount.TabIndex = 8;
             numCount.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            numCount.ValueChanged += numCount_ValueChanged;
             // 
             // label4
             // 
@@ -225,6 +223,8 @@
             cmbFunctionCode.Name = "cmbFunctionCode";
             cmbFunctionCode.Size = new Size(108, 23);
             cmbFunctionCode.TabIndex = 4;
+            cmbFunctionCode.SelectedIndexChanged += cmbFunctionCode_SelectedIndexChanged;
+            cmbFunctionCode.TextChanged += cmbFunctionCode_TextChanged;
             // 
             // label2
             // 
@@ -266,6 +266,8 @@
             gridTx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             gridTx.Size = new Size(200, 375);
             gridTx.TabIndex = 15;
+            gridTx.CellEndEdit += GridTx_CellEndEdit;
+            gridTx.CellEndEdit += HexAutoFormat_OnEndEdit;
             // 
             // colTxReg
             // 
@@ -318,6 +320,7 @@
             // 
             txtRxDataCount.Location = new Point(107, 143);
             txtRxDataCount.Name = "txtRxDataCount";
+            txtRxDataCount.ReadOnly = true;
             txtRxDataCount.Size = new Size(108, 23);
             txtRxDataCount.TabIndex = 48;
             // 
@@ -325,6 +328,7 @@
             // 
             txtRxCrc.Location = new Point(107, 170);
             txtRxCrc.Name = "txtRxCrc";
+            txtRxCrc.ReadOnly = true;
             txtRxCrc.Size = new Size(108, 23);
             txtRxCrc.TabIndex = 47;
             // 
@@ -337,6 +341,7 @@
             btnCopyToTx.TabIndex = 46;
             btnCopyToTx.Text = "Copy to TX";
             btnCopyToTx.UseVisualStyleBackColor = true;
+            btnCopyToTx.Click += btnCopyToTx_Click;
             // 
             // btnRxClear
             // 
@@ -347,6 +352,7 @@
             btnRxClear.TabIndex = 45;
             btnRxClear.Text = "CLEAR";
             btnRxClear.UseVisualStyleBackColor = true;
+            btnRxClear.Click += btnRxClear_Click;
             // 
             // label7
             // 
@@ -372,6 +378,7 @@
             // 
             txtRxFc.Location = new Point(107, 55);
             txtRxFc.Name = "txtRxFc";
+            txtRxFc.ReadOnly = true;
             txtRxFc.Size = new Size(108, 23);
             txtRxFc.TabIndex = 42;
             // 
@@ -379,6 +386,7 @@
             // 
             txtRxStart.Location = new Point(107, 84);
             txtRxStart.Name = "txtRxStart";
+            txtRxStart.ReadOnly = true;
             txtRxStart.Size = new Size(108, 23);
             txtRxStart.TabIndex = 41;
             // 
@@ -386,6 +394,7 @@
             // 
             txtRxCount.Location = new Point(107, 112);
             txtRxCount.Name = "txtRxCount";
+            txtRxCount.ReadOnly = true;
             txtRxCount.Size = new Size(108, 23);
             txtRxCount.TabIndex = 40;
             // 
@@ -393,6 +402,7 @@
             // 
             txtRxSlave.Location = new Point(107, 27);
             txtRxSlave.Name = "txtRxSlave";
+            txtRxSlave.ReadOnly = true;
             txtRxSlave.Size = new Size(108, 23);
             txtRxSlave.TabIndex = 37;
             // 
@@ -445,6 +455,7 @@
             gridRx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             gridRx.Size = new Size(200, 375);
             gridRx.TabIndex = 0;
+            gridRx.CellEndEdit += HexAutoFormat_OnEndEdit;
             // 
             // colRxReg
             // 
@@ -473,6 +484,7 @@
             // grpCom
             // 
             grpCom.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            grpCom.Controls.Add(chkSlaveMode);
             grpCom.Controls.Add(btnClose);
             grpCom.Controls.Add(btnOpen);
             grpCom.Controls.Add(cmbStopBits);
@@ -743,6 +755,16 @@
             // 
             pollTimer.Tick += pollTimer_Tick;
             // 
+            // chkSlaveMode
+            // 
+            chkSlaveMode.AutoSize = true;
+            chkSlaveMode.Location = new Point(88, 9);
+            chkSlaveMode.Name = "chkSlaveMode";
+            chkSlaveMode.Size = new Size(87, 19);
+            chkSlaveMode.TabIndex = 12;
+            chkSlaveMode.Text = "Slave Mode";
+            chkSlaveMode.UseVisualStyleBackColor = true;
+            // 
             // FormMain
             // 
             AutoScaleDimensions = new SizeF(96F, 96F);
@@ -842,5 +864,6 @@
         private Button btnRxClear;
         private Label label7;
         private Label label8;
+        private CheckBox chkSlaveMode;
     }
 }

@@ -39,6 +39,7 @@ namespace ModbusTester
             colTxHex = new DataGridViewTextBoxColumn();
             colTxDec = new DataGridViewTextBoxColumn();
             grpRx = new GroupBox();
+            btnQuickView = new Button();
             txtRxDataCount = new TextBox();
             txtRxCrc = new TextBox();
             btnCopyToTx = new Button();
@@ -293,6 +294,7 @@ namespace ModbusTester
             // grpRx
             // 
             grpRx.Anchor = AnchorStyles.Top | AnchorStyles.Bottom;
+            grpRx.Controls.Add(btnQuickView);
             grpRx.Controls.Add(txtRxDataCount);
             grpRx.Controls.Add(txtRxCrc);
             grpRx.Controls.Add(btnCopyToTx);
@@ -314,6 +316,16 @@ namespace ModbusTester
             grpRx.TabIndex = 1;
             grpRx.TabStop = false;
             grpRx.Text = "Receive";
+            // 
+            // btnQuickView
+            // 
+            btnQuickView.Location = new Point(16, 252);
+            btnQuickView.Name = "btnQuickView";
+            btnQuickView.Size = new Size(95, 44);
+            btnQuickView.TabIndex = 49;
+            btnQuickView.Text = "QuickView";
+            btnQuickView.UseVisualStyleBackColor = true;
+            btnQuickView.Click += btnQuickView_Click;
             // 
             // txtRxDataCount
             // 
@@ -506,7 +518,7 @@ namespace ModbusTester
             // chkSlaveMode
             // 
             chkSlaveMode.AutoSize = true;
-            chkSlaveMode.Location = new Point(88, 9);
+            chkSlaveMode.Location = new Point(88, 13);
             chkSlaveMode.Name = "chkSlaveMode";
             chkSlaveMode.Size = new Size(87, 19);
             chkSlaveMode.TabIndex = 12;
@@ -864,5 +876,6 @@ namespace ModbusTester
         private Label label7;
         private Label label8;
         private CheckBox chkSlaveMode;
+        private Button btnQuickView;
     }
 }

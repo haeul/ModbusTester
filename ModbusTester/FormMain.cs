@@ -23,6 +23,9 @@ namespace ModbusTester
         private DateTime _recUntil;
         private readonly System.Windows.Forms.Timer _recTimer = new System.Windows.Forms.Timer();
 
+        // Quick View
+        private FormQuickView? _quick;
+
         // ───────────────────────── Ctor ─────────────────────────
         public FormMain()
         {
@@ -75,9 +78,9 @@ namespace ModbusTester
             // TX 기본
             numSlave.Value = 1;
             numStartRegister.Hexadecimal = true;
-            numStartRegister.Minimum = 0x1000;
+            numStartRegister.Minimum = 0x0001;
             numStartRegister.Maximum = 0x11FF;
-            numStartRegister.Value = 0x1000;
+            numStartRegister.Value = 0x0001;
             numCount.Value = 1;
             RefreshDataCount();
 
@@ -85,10 +88,10 @@ namespace ModbusTester
             SetupGrid(gridTx);
             SetupGrid(gridRx);
 
-            // TX 행 1000h~11FFh
+            // TX 행 0001h~11FFh
             InitializeTxRows();
 
-            // RX 행 1000h~11FFh
+            // RX 행 0001h~11FFh
             InitializeRxRows();
 
             // 모드에 따른 UI 반영
@@ -130,14 +133,14 @@ namespace ModbusTester
         private void InitializeTxRows()
         {
             gridTx.Rows.Clear();
-            for (int i = 0x1000; i <= 0x11FF; i++)
+            for (int i = 0x0001; i <= 0x11FF; i++)
                 gridTx.Rows.Add($"{i:X4}h", "", "");
         }
 
         private void InitializeRxRows()
         {
             gridRx.Rows.Clear();
-            for (int i = 0x1000; i <= 0x11fF; i++)
+            for (int i = 0x0001; i <= 0x11fF; i++)
                 gridRx.Rows.Add($"{i:X4}h", "", "");
         }
 
@@ -319,6 +322,8 @@ namespace ModbusTester
                     UpdateReceiveHeader(resp, slave, fc, start, count);
                     var values = ParseReadResponse(resp);
                     FillRxGrid(start, values);
+
+                    RegisterCache.UpdateRange(start, values); // 캐시 갱신
                 }
                 else if (fc == 0x06)
                 {
@@ -328,6 +333,8 @@ namespace ModbusTester
                     var resp = SendAndReceive(req);
                     Log("RX: " + ToHex(resp));
                     UpdateReceiveHeader(resp, slave, fc, start, 1);
+
+                    RegisterCache.UpdateRange(start, new ushort[] { val });
                 }
                 else if (fc == 0x10)
                 {
@@ -337,6 +344,8 @@ namespace ModbusTester
                     var resp = SendAndReceive(req);
                     Log("RX: " + ToHex(resp));
                     UpdateReceiveHeader(resp, slave, fc, start, (ushort)vals.Length);
+
+                    RegisterCache.UpdateRange(start, vals);
                 }
                 else
                 {
@@ -453,6 +462,8 @@ namespace ModbusTester
                 UpdateReceiveHeader(resp, slave, fc, start, count);
                 var values = ParseReadResponse(resp);
                 FillRxGrid(start, values);
+
+                RegisterCache.UpdateRange(start, values); // 캐시 갱신
             }
             catch { /* 폴링 중 예외 무시 */ }
         }
@@ -461,11 +472,11 @@ namespace ModbusTester
         {
             if (values == null || values.Length == 0) return;
 
-            // 1000h~11FFh 범위에서만 갱신
+            // 0001h~11FFh 범위에서만 갱신
             for (int i = 0; i < values.Length; i++)
             {
                 ushort addr = (ushort)(startAddr + i);
-                if (addr < 0x1000 || addr > 0x11FF) continue;
+                if (addr < 0x0001 || addr > 0x11FF) continue;
 
                 string key = $"{addr:X4}h";
 
@@ -824,7 +835,7 @@ namespace ModbusTester
             {
                 // 이미 녹화 중이면 재시작
                 StopRecording();
-                string dir = "C:\\Users\\haeul\\source\\repos\\ModbusTester\\Data";  
+                string dir = "C:\\Users\\haeul\\source\\repos\\ModbusTester\\Data";
                 string path = Path.Combine(dir, $"modbus_rec_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
                 _recWriter = new StreamWriter(path, append: true, Encoding.UTF8);
                 _recUntil = DateTime.Now.AddSeconds(seconds);
@@ -859,6 +870,25 @@ namespace ModbusTester
             {
                 // 무시
             }
+        }
+
+        // QuickView
+        private void ToggleQuickWatch()
+        {
+            if (_quick == null || _quick.IsDisposed)
+            {
+                _quick = new FormQuickView();
+                _quick.Show(this); // 소유자 지정
+            }
+            else
+            {
+                _quick.Close();
+            }
+        }
+
+        private void btnQuickView_Click(object sender, EventArgs e)
+        {
+            ToggleQuickWatch();
         }
     }
 }

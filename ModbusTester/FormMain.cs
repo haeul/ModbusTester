@@ -15,10 +15,10 @@ namespace ModbusTester
         private readonly SerialPort _sp = new SerialPort();
         private bool _isOpen => _sp.IsOpen;
 
-        // [추가] Slave 모드용 에뮬레이터 인스턴스
+        // Slave 모드용 에뮬레이터 인스턴스
         private ModbusSlave _slave;
 
-        // [추가] Recording 관련 필드
+        // Recording 관련 필드
         private StreamWriter _recWriter = null;
         private DateTime _recUntil;
         private readonly System.Windows.Forms.Timer _recTimer = new System.Windows.Forms.Timer();
@@ -29,7 +29,7 @@ namespace ModbusTester
             InitializeComponent();
         }
 
-        // [추가] 모드(마스터/슬레이브)에 따른 UI 잠금
+        // 모드(마스터/슬레이브)에 따른 UI 잠금
         private void UpdateUiByMode()
         {
             bool slave = chkSlaveMode.Checked;
@@ -91,10 +91,10 @@ namespace ModbusTester
             // RX 행 1000h~11FFh
             InitializeRxRows();
 
-            // [추가] 모드에 따른 UI 반영
+            // 모드에 따른 UI 반영
             UpdateUiByMode();
 
-            // [추가] Recording 타이머 설정
+            // Recording 타이머 설정
             _recTimer.Interval = 200; // 종료시점 주기 체크
             _recTimer.Tick += (s, ev) =>
             {
@@ -103,7 +103,7 @@ namespace ModbusTester
             };
         }
 
-        // [추가] 체크박스 핸들러
+        // 체크박스 핸들러
         private void chkSlaveMode_CheckedChanged(object sender, EventArgs e)
         {
             pollTimer.Stop();
@@ -193,7 +193,7 @@ namespace ModbusTester
             {
                 pollTimer.Stop();
 
-                // [추가] 레코딩 중이면 먼저 안전 종료
+                // 레코딩 중이면 먼저 안전 종료
                 StopRecording();
 
                 if (chkSlaveMode.Checked)
@@ -824,8 +824,8 @@ namespace ModbusTester
             {
                 // 이미 녹화 중이면 재시작
                 StopRecording();
-
-                string path = $"modbus_rec_{DateTime.Now:yyyyMMdd_HHmmss}.txt";
+                string dir = "C:\\Users\\haeul\\source\\repos\\ModbusTester\\Data";  
+                string path = Path.Combine(dir, $"modbus_rec_{DateTime.Now:yyyyMMdd_HHmmss}.txt");
                 _recWriter = new StreamWriter(path, append: true, Encoding.UTF8);
                 _recUntil = DateTime.Now.AddSeconds(seconds);
 

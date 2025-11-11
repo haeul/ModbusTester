@@ -58,6 +58,7 @@ namespace ModbusTester
             colRxHex = new DataGridViewTextBoxColumn();
             colRxDec = new DataGridViewTextBoxColumn();
             grpCom = new GroupBox();
+            chkSlaveMode = new CheckBox();
             btnClose = new Button();
             btnOpen = new Button();
             cmbStopBits = new ComboBox();
@@ -83,7 +84,6 @@ namespace ModbusTester
             btnLogClear = new Button();
             txtLog = new RichTextBox();
             pollTimer = new System.Windows.Forms.Timer(components);
-            chkSlaveMode = new CheckBox();
             grpTx.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)numStartRegister).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numCount).BeginInit();
@@ -266,7 +266,6 @@ namespace ModbusTester
             gridTx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             gridTx.Size = new Size(200, 375);
             gridTx.TabIndex = 15;
-            gridTx.CellEndEdit += GridTx_CellEndEdit;
             gridTx.CellEndEdit += HexAutoFormat_OnEndEdit;
             // 
             // colTxReg
@@ -503,6 +502,16 @@ namespace ModbusTester
             grpCom.TabIndex = 2;
             grpCom.TabStop = false;
             grpCom.Text = "COM Setting";
+            // 
+            // chkSlaveMode
+            // 
+            chkSlaveMode.AutoSize = true;
+            chkSlaveMode.Location = new Point(88, 9);
+            chkSlaveMode.Name = "chkSlaveMode";
+            chkSlaveMode.Size = new Size(87, 19);
+            chkSlaveMode.TabIndex = 12;
+            chkSlaveMode.Text = "Slave Mode";
+            chkSlaveMode.UseVisualStyleBackColor = true;
             // 
             // btnClose
             // 
@@ -754,16 +763,6 @@ namespace ModbusTester
             // pollTimer
             // 
             pollTimer.Tick += pollTimer_Tick;
-            // 
-            // chkSlaveMode
-            // 
-            chkSlaveMode.AutoSize = true;
-            chkSlaveMode.Location = new Point(88, 9);
-            chkSlaveMode.Name = "chkSlaveMode";
-            chkSlaveMode.Size = new Size(87, 19);
-            chkSlaveMode.TabIndex = 12;
-            chkSlaveMode.Text = "Slave Mode";
-            chkSlaveMode.UseVisualStyleBackColor = true;
             // 
             // FormMain
             // 

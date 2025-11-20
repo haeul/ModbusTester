@@ -1,73 +1,107 @@
 ﻿using System;
-using System.Runtime.Intrinsics.Arm;
 
 namespace ModbusTester.Modbus
 {
+    /// <summary>
+    /// Modbus RTU 프레임 구성/파싱 + CRC 계산 담당
+    /// (SerialPort, UI 전혀 모름)
+    /// </summary>
     public static class ModbusRtu
     {
-        /// 03h/04h 읽기 요청 프레임 생성: [slave][fc][startHi][startLo][cntHi][cntLo][crcLo][crcHi]
-        public static byte[] BuildReadFrame(byte slave, FunctionCode fc, ushort start, ushort count)
+        // ───────── CRC ─────────
+        public static ushort Crc16(byte[] data, int len)
         {
-            if (fc != FunctionCode.ReadHoldingRegisters && fc != FunctionCode.ReadInputRegisters)
-                throw new ArgumentException("Use 03h or 04h for read.");
-
-            var frame = new byte[8];
-            frame[0] = slave;                // 슬레이브 주소
-            frame[1] = (byte)fc;             // 0x03 또는 0x04
-            frame[2] = (byte)(start >> 8);   // 시작 주소 상위바이트
-            frame[3] = (byte)(start & 0xFF); // 시작 주소 하위바이트
-            frame[4] = (byte)(count >> 8);   // 레지스터 개수 상위바이트
-            frame[5] = (byte)(count & 0xFF); // 레지스터 개수 하위바이트
-
-            var crc = Crc16.Compute(frame, 6);                 // 앞 6바이트에 대해 CRC 계산
-            Crc16.AppendLittleEndian(frame, 6, crc);           // frame[6]=crcLo, frame[7]=crcHi 로 기록
-            return frame;
+            ushort crc = 0xFFFF;
+            for (int i = 0; i < len; i++)
+            {
+                crc ^= data[i];
+                for (int b = 0; b < 8; b++)
+                {
+                    bool lsb = (crc & 0x0001) != 0;
+                    crc >>= 1;
+                    if (lsb) crc ^= 0xA001;
+                }
+            }
+            return crc;
         }
 
-
-        /// 06h 단일 쓰기: [slave][06][addrHi][addrLo][valHi][valLo][crcLo][crcHi]
-        public static byte[] BuildWriteSingleFrame(byte slave, ushort address, ushort value)
+        /// <summary>프레임 바디에 CRC 두 바이트를 붙인 전체 프레임 반환</summary>
+        public static byte[] WithCrc(byte[] frameBody)
         {
-            var frame = new byte[8];
-            frame[0] = slave;
-            frame[1] = (byte)FunctionCode.WriteSingleRegister; // 0x06
-            frame[2] = (byte)(address >> 8);                   // 주소 Hi
-            frame[3] = (byte)(address & 0xFF);                 // 주소 Lo
-            frame[4] = (byte)(value >> 8);                     // 값 Hi
-            frame[5] = (byte)(value & 0xFF);                   // 값 Lo
-
-            var crc = Crc16.Compute(frame, 6);
-            Crc16.AppendLittleEndian(frame, 6, crc);
-            return frame;
+            var crc = Crc16(frameBody, frameBody.Length);
+            var arr = new byte[frameBody.Length + 2];
+            Buffer.BlockCopy(frameBody, 0, arr, 0, frameBody.Length);
+            arr[^2] = (byte)(crc & 0xFF);
+            arr[^1] = (byte)((crc >> 8) & 0xFF);
+            return arr;
         }
 
+        // ───────── 프레임 빌더 ─────────
 
-        /// 10h 다중 쓰기
+        public static byte[] BuildReadFrame(byte slave, byte fc, ushort start, ushort count)
+        {
+            var raw = new byte[]
+            {
+                slave, fc,
+                (byte)(start >> 8), (byte)(start & 0xFF),
+                (byte)(count >> 8), (byte)(count & 0xFF)
+            };
+            return WithCrc(raw);
+        }
+
+        public static byte[] BuildWriteSingleFrame(byte slave, ushort addr, ushort value)
+        {
+            var raw = new byte[]
+            {
+                slave, 0x06,
+                (byte)(addr  >> 8), (byte)(addr  & 0xFF),
+                (byte)(value >> 8), (byte)(value & 0xFF)
+            };
+            return WithCrc(raw);
+        }
+
         public static byte[] BuildWriteMultipleFrame(byte slave, ushort start, ushort[] values)
         {
-            ushort count = (ushort)values.Length;       // 레지스터 개수
-            int byteCount = count * 2;                  // 실제 데이터 바이트 수
-            var frame = new byte[7 + 1 + byteCount + 2]; // header6 + byteCount1 + data + crc2
+            ushort count = (ushort)values.Length;
+            byte byteCount = (byte)(count * 2);
 
-            frame[0] = slave;
-            frame[1] = (byte)FunctionCode.WriteMultipleRegisters; // 0x10
-            frame[2] = (byte)(start >> 8);                        // 시작 주소 Hi
-            frame[3] = (byte)(start & 0xFF);                      // 시작 주소 Lo
-            frame[4] = (byte)(count >> 8);                        // 개수 Hi
-            frame[5] = (byte)(count & 0xFF);                      // 개수 Lo
-            frame[6] = (byte)byteCount;                           // 데이터 바이트 수
+            var raw = new byte[7 + byteCount];
+            raw[0] = slave;
+            raw[1] = 0x10;
+            raw[2] = (byte)(start >> 8);
+            raw[3] = (byte)(start & 0xFF);
+            raw[4] = (byte)(count >> 8);
+            raw[5] = (byte)(count & 0xFF);
+            raw[6] = byteCount;
 
-            int p = 7;                                            // 데이터 시작 인덱스
-            foreach (var v in values)
+            for (int i = 0; i < values.Length; i++)
             {
-                frame[p++] = (byte)(v >> 8);                      // 값 Hi
-                frame[p++] = (byte)(v & 0xFF);                    // 값 Lo
+                raw[7 + i * 2] = (byte)(values[i] >> 8);
+                raw[8 + i * 2] = (byte)(values[i] & 0xFF);
             }
 
-            var crc = Crc16.Compute(frame, frame.Length - 2);     // CRC는 마지막 두 바이트를 제외하고 계산
-            Crc16.AppendLittleEndian(frame, frame.Length - 2, crc); // 끝 두 바이트에 crcLo/Hi
-            return frame;
+            return WithCrc(raw);
         }
 
+        // ───────── 응답 파싱 ─────────
+
+        public static ushort[] ParseReadResponse(byte[] resp)
+        {
+            if (resp == null || resp.Length < 5)
+                return Array.Empty<ushort>();
+
+            int bc = resp[2];
+            int n = bc / 2;
+            var arr = new ushort[n];
+
+            for (int i = 0; i < n; i++)
+            {
+                int idx = 3 + i * 2;
+                if (idx + 1 >= resp.Length) break;
+                arr[i] = (ushort)((resp[idx] << 8) | resp[idx + 1]);
+            }
+
+            return arr;
+        }
     }
 }

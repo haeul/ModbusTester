@@ -1,134 +1,236 @@
 ﻿using System;
+using System.Collections.Generic;
 using System.Drawing;
+using System.Drawing.Text;
+using System.IO;
+using System.Linq;
 using System.Windows.Forms;
 
 namespace ModbusTester
 {
-    public class FormQuickView : Form
+    public partial class FormQuickView : Form
     {
-        private readonly Label _lbl12 = new Label();
-        private readonly Label _lbl2A = new Label();
-        private readonly TableLayoutPanel _pnl = new TableLayoutPanel();
+        // RX Grid 에서 넘어온 QuickView 대상 (주소, 라벨)
+        private readonly List<(ushort addr, string label)> _targets;
 
-        // 표시할 레지스터 주소 (기본: 0x0012, 0x002A)
-        public ushort Addr12h { get; set; } = 0x0012;
-        public ushort Addr2Ah { get; set; } = 0x002A;
+        // 디지털 숫자용 폰트 (옵션)
+        private PrivateFontCollection? _pfc;
+        private Font? _valueFont;
 
-        public FormQuickView()
+        // UserControl 행 목록
+        private readonly List<ChannelRowControl> _rows = new();
+
+        public FormQuickView(List<(ushort addr, string label)> targets)
         {
-            // ───────── 폼 기본 설정: 순수 WinForms 방식 ─────────
-            Text = "Quick View";
-            StartPosition = FormStartPosition.Manual;
+            _targets = targets?.ToList() ?? new List<(ushort addr, string label)>();
 
-            // 표준 제목줄 + 버튼 + 사이즈 조절
-            FormBorderStyle = FormBorderStyle.Sizable;
-            ControlBox = true;
-            MinimizeBox = true;
-            MaximizeBox = true;
+            InitializeComponent();
+            LoadDigitalFont();
 
-            TopMost = true;                     // 필요 시 항상 위
-            BackColor = Color.White;
-            Opacity = 1.0;
-            AutoScaleMode = AutoScaleMode.Dpi;  // 고해상도 대응
-            DoubleBuffered = true;
+            BuildRows();
 
-            // 기본/최소 크기
-            Size = new Size(520, 220);
-            MinimumSize = new Size(420, 180);
-
-            // ───────── 라벨/레이아웃 구성 ─────────
-            var fontBig = new Font("Segoe UI", 28, FontStyle.Bold);
-            InitLabel(_lbl12, fontBig, Color.Black);
-            InitLabel(_lbl2A, fontBig, Color.Black);
-
-            _pnl.Dock = DockStyle.Fill;
-            _pnl.ColumnCount = 1;
-            _pnl.RowCount = 2;
-            _pnl.Padding = new Padding(16);
-            _pnl.BackColor = Color.White;
-
-            // 폰트 높이에 맞춘 절대행 높이 → 잘림 방지
-            int rowH = fontBig.Height + 20;
-            _pnl.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
-            _pnl.RowStyles.Add(new RowStyle(SizeType.Absolute, rowH));
-
-            _pnl.Controls.Add(_lbl12, 0, 0);
-            _pnl.Controls.Add(_lbl2A, 0, 1);
-            Controls.Add(_pnl);
-
-            // ───────── 이벤트 연결 ─────────
-            // 캐시 변경 시 UI 갱신
-            RegisterCache.Changed += OnCacheChanged;
-
-            // 처음 보여줄 때 커서 근처로 위치 + 화면 밖 방지 + 값 갱신
-            Shown += (_, __) => { PlaceNearCursor(); EnsureOnScreen(); RefreshValues(); };
-
-            // 창 크기 변경 시에도 화면 밖 방지
-            SizeChanged += (_, __) => EnsureOnScreen();
-
-            // 닫힐 때 이벤트 구독 해제
-            FormClosed += (_, __) => RegisterCache.Changed -= OnCacheChanged;
-
-            // UX: 우클릭 닫기 / 더블클릭 TopMost 토글 
-            MouseUp += (_, e) => { if (e.Button == MouseButtons.Right) Close(); };
-            MouseDoubleClick += (_, __) => TopMost = !TopMost;
-        }
-
-        private void InitLabel(Label lab, Font font, Color fore)
-        {
-            lab.AutoSize = false;
-            lab.Dock = DockStyle.Fill;                 // 영역 전체 사용
-            lab.TextAlign = ContentAlignment.MiddleLeft;
-            lab.Padding = new Padding(10, 0, 10, 0);   // 좌우 여백
-            lab.Font = font;
-            lab.ForeColor = fore;
-            lab.BackColor = Color.White;
-        }
-
-        // 캐시 이벤트는 다른 스레드에서 올 수 있으므로 UI 스레드로 마샬링
-        private void OnCacheChanged() => BeginInvoke((Action)RefreshValues);
-
-        private void RefreshValues()
-        {
-            _lbl12.Text = RegisterCache.TryGet(Addr12h, out var v12)
-                ? $"Channel 1 : {FormatValue(v12)}"
-                : "Channel 1 : --";
-
-            _lbl2A.Text = RegisterCache.TryGet(Addr2Ah, out var v2a)
-                ? $"Channel 2 : {FormatValue(v2a)}"
-                : "Channel 2 : --";
-        }
-
-        private string FormatValue(ushort raw)
-        {
-            if (raw >= 1000.0)
+            Shown += (_, __) =>
             {
-                double mA = raw / 1000.0;
-                return $"{mA:0.000} mA";
+                AdjustFormHeightToContent();
+                RefreshValues();
+            };
+
+            Resize += (_, __) =>
+            {
+                AdjustRowWidths();
+            };
+
+            RegisterCache.Changed += OnCacheChanged;
+            FormClosed += (_, __) => RegisterCache.Changed -= OnCacheChanged;
+        }
+
+        /// <summary>
+        /// 이미 떠 있는 QuickView 창에 대해, 표시할 타깃 목록을 갱신할 때 사용.
+        /// (FormMain에서 QV 체크 변경 후 호출)
+        /// </summary>
+        public void UpdateTargets(List<(ushort addr, string label)> targets)
+        {
+            _targets.Clear();
+            if (targets != null && targets.Count > 0)
+                _targets.AddRange(targets);
+
+            BuildRows();
+            RefreshValues();
+        }
+
+        // ───────────────────────── 행(UserControl) 구성 ─────────────────────────
+
+        private void BuildRows()
+        {
+            flowChannels.SuspendLayout();
+            try
+            {
+                flowChannels.Controls.Clear();
+                _rows.Clear();
+
+                if (_targets.Count == 0)
+                {
+                    AdjustFormHeightToContent();
+                    return;
+                }
+
+                foreach (var (addr, label) in _targets)
+                {
+                    var row = new ChannelRowControl
+                    {
+                        Address = addr,
+                        LabelText = label
+                    };
+
+                    if (_valueFont != null)
+                        row.SetValueFont(_valueFont);
+
+                    // FlowLayoutPanel 안에서 폭 맞춰주기
+                    int innerWidth = flowChannels.ClientSize.Width
+                                     - flowChannels.Padding.Left
+                                     - flowChannels.Padding.Right;
+                    if (innerWidth < 100) innerWidth = 100;
+                    row.Width = innerWidth;
+
+                    _rows.Add(row);
+                    flowChannels.Controls.Add(row);
+                }
+            }
+            finally
+            {
+                flowChannels.ResumeLayout();
+            }
+
+            AdjustFormHeightToContent();
+        }
+
+        private void AdjustRowWidths()
+        {
+            int innerWidth = flowChannels.ClientSize.Width
+                             - flowChannels.Padding.Left
+                             - flowChannels.Padding.Right;
+            if (innerWidth < 100) innerWidth = 100;
+
+            foreach (Control c in flowChannels.Controls)
+            {
+                c.Width = innerWidth;
+            }
+        }
+
+        /// <summary>
+        /// 현재 flowChannels 안에 있는 채널 패널 개수에 맞춰
+        /// 폼 높이를 자동으로 조절한다.
+        /// </summary>
+        private void AdjustFormHeightToContent()
+        {
+            if (flowChannels == null)
+                return;
+
+            int contentHeight = flowChannels.Padding.Top + flowChannels.Padding.Bottom;
+
+            foreach (Control c in flowChannels.Controls)
+            {
+                if (!c.Visible) continue;
+                contentHeight += c.Height + c.Margin.Top + c.Margin.Bottom;
+            }
+
+            if (contentHeight <= 0)
+                contentHeight = 100;
+
+            var workArea = Screen.FromControl(this).WorkingArea;
+
+            int minClientHeight = 150;
+            int maxClientHeight = workArea.Height - 80;
+
+            int desiredClientHeight = contentHeight;
+
+            bool needScroll = desiredClientHeight > maxClientHeight;
+            if (needScroll)
+                desiredClientHeight = maxClientHeight;
+
+            desiredClientHeight = Math.Max(minClientHeight, desiredClientHeight);
+
+            flowChannels.AutoScroll = needScroll;
+
+            if (needScroll)
+            {
+                int extraBottom = 5;
+                flowChannels.AutoScrollMinSize = new Size(
+                    0,
+                    contentHeight + extraBottom
+                );
             }
             else
             {
-                double uA = raw;
-                return $"{uA:0} uA";
+                flowChannels.AutoScrollMinSize = Size.Empty;
             }
-            
+
+            int chrome = Height - ClientSize.Height;
+            Height = desiredClientHeight + chrome;
+
+            AdjustRowWidths();
+            flowChannels.PerformLayout();
         }
 
-        // 모니터 작업영역 안에 머물도록 위치 보정
-        private void EnsureOnScreen()
+        // ───────────────────────── 디지털 폰트 로드 ─────────────────────────
+
+        private void LoadDigitalFont()
         {
-            var wa = Screen.FromPoint(Location).WorkingArea;
-            Location = new Point(
-                Math.Max(wa.Left, Math.Min(Left, wa.Right - Width)),
-                Math.Max(wa.Top, Math.Min(Top, wa.Bottom - Height))
-            );
+            try
+            {
+                string fontDir = Path.Combine(Application.StartupPath, "Fonts");
+                string fontPath = Path.Combine(fontDir, "dseg7-classic-latin-700-normal.ttf");
+
+                if (!File.Exists(fontPath))
+                {
+                    _valueFont = new Font("Consolas", 28F, FontStyle.Bold, GraphicsUnit.Point);
+                    return;
+                }
+
+                _pfc = new PrivateFontCollection();
+                _pfc.AddFontFile(fontPath);
+
+                if (_pfc.Families.Length == 0)
+                {
+                    _valueFont = new Font("Consolas", 28F, FontStyle.Bold, GraphicsUnit.Point);
+                    return;
+                }
+
+                FontFamily ff = _pfc.Families[0];
+                _valueFont = new Font(ff, 30F, FontStyle.Regular, GraphicsUnit.Point);
+            }
+            catch
+            {
+                _valueFont = new Font("Consolas", 28F, FontStyle.Bold, GraphicsUnit.Point);
+            }
         }
 
-        // 처음 표시 시 커서 근처에 배치
-        private void PlaceNearCursor()
+        // ───────────────────────── RegisterCache 변경 이벤트 ─────────────────────────
+
+        private void OnCacheChanged()
         {
-            var cur = Cursor.Position;
-            Location = new Point(cur.X + 20, cur.Y + 20);
+            if (!IsHandleCreated || IsDisposed)
+                return;
+
+            try
+            {
+                BeginInvoke((Action)RefreshValues);
+            }
+            catch (ObjectDisposedException)
+            {
+                // 폼 닫히는 중이면 무시
+            }
+        }
+
+        private void RefreshValues()
+        {
+            foreach (var row in _rows)
+            {
+                if (RegisterCache.TryGet(row.Address, out var raw))
+                    row.UpdateFromRaw(raw);
+                else
+                    row.ClearValues();
+            }
         }
     }
 }

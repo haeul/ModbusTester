@@ -8,10 +8,16 @@ namespace ModbusTester
     {
         private SerialPort? _sp;
         private ModbusSlave? _slave;
+        private readonly LayoutScaler _layoutScaler;
+
 
         public FormComSetting()
         {
             InitializeComponent();
+
+            _layoutScaler = new LayoutScaler(this);
+            _layoutScaler.ApplyInitialScale(1.3f);
+
             this.StartPosition = FormStartPosition.CenterScreen;
             Load += FormComSetting_Load;
         }

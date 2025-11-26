@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Drawing;
 using System.Windows.Forms;
 
 namespace ModbusTester
@@ -41,6 +42,7 @@ namespace ModbusTester
             colRxHex = new DataGridViewTextBoxColumn();
             colRxDec = new DataGridViewTextBoxColumn();
             colRxBit = new DataGridViewTextBoxColumn();
+            colRxQuickView = new DataGridViewCheckBoxColumn();
             grpOpt = new GroupBox();
             btnPollStop = new Button();
             btnPollStart = new Button();
@@ -48,7 +50,6 @@ namespace ModbusTester
             label19 = new Label();
             cmbRecordEvery = new ComboBox();
             chkRecording = new CheckBox();
-            label18 = new Label();
             grpLog = new GroupBox();
             btnSaveLog = new Button();
             btnLogClear = new Button();
@@ -112,18 +113,18 @@ namespace ModbusTester
             grpRx.Controls.Add(lblRxFunctionCode);
             grpRx.Controls.Add(lblRxSlaveAddress);
             grpRx.Controls.Add(gridRx);
-            grpRx.Location = new Point(672, 12);
+            grpRx.Location = new Point(683, 12);
             grpRx.Name = "grpRx";
-            grpRx.Size = new Size(643, 420);
+            grpRx.Size = new Size(690, 420);
             grpRx.TabIndex = 1;
             grpRx.TabStop = false;
             grpRx.Text = "Receive";
             // 
             // btnQuickView
             // 
-            btnQuickView.Location = new Point(16, 252);
+            btnQuickView.Location = new Point(7, 242);
             btnQuickView.Name = "btnQuickView";
-            btnQuickView.Size = new Size(95, 44);
+            btnQuickView.Size = new Size(209, 32);
             btnQuickView.TabIndex = 49;
             btnQuickView.Text = "QuickView";
             btnQuickView.UseVisualStyleBackColor = true;
@@ -131,26 +132,26 @@ namespace ModbusTester
             // 
             // txtRxDataCount
             // 
-            txtRxDataCount.Location = new Point(107, 143);
+            txtRxDataCount.Location = new Point(108, 147);
             txtRxDataCount.Name = "txtRxDataCount";
             txtRxDataCount.ReadOnly = true;
-            txtRxDataCount.Size = new Size(108, 23);
+            txtRxDataCount.Size = new Size(108, 25);
             txtRxDataCount.TabIndex = 48;
             // 
             // txtRxCrc
             // 
-            txtRxCrc.Location = new Point(107, 170);
+            txtRxCrc.Location = new Point(108, 177);
             txtRxCrc.Name = "txtRxCrc";
             txtRxCrc.ReadOnly = true;
-            txtRxCrc.Size = new Size(108, 23);
+            txtRxCrc.Size = new Size(108, 25);
             txtRxCrc.TabIndex = 47;
             // 
             // btnCopyToTx
             // 
             btnCopyToTx.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnCopyToTx.Location = new Point(120, 202);
+            btnCopyToTx.Location = new Point(116, 207);
             btnCopyToTx.Name = "btnCopyToTx";
-            btnCopyToTx.Size = new Size(95, 44);
+            btnCopyToTx.Size = new Size(100, 32);
             btnCopyToTx.TabIndex = 46;
             btnCopyToTx.Text = "Copy to TX";
             btnCopyToTx.UseVisualStyleBackColor = true;
@@ -159,11 +160,11 @@ namespace ModbusTester
             // btnRxClear
             // 
             btnRxClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnRxClear.Location = new Point(16, 202);
+            btnRxClear.Location = new Point(7, 207);
             btnRxClear.Name = "btnRxClear";
-            btnRxClear.Size = new Size(95, 44);
+            btnRxClear.Size = new Size(100, 32);
             btnRxClear.TabIndex = 45;
-            btnRxClear.Text = "CLEAR";
+            btnRxClear.Text = "Clear";
             btnRxClear.UseVisualStyleBackColor = true;
             btnRxClear.Click += btnRxClear_Click;
             // 
@@ -171,9 +172,9 @@ namespace ModbusTester
             // 
             lblRxCrc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblRxCrc.AutoSize = true;
-            lblRxCrc.Location = new Point(71, 171);
+            lblRxCrc.Location = new Point(71, 177);
             lblRxCrc.Name = "lblRxCrc";
-            lblRxCrc.Size = new Size(30, 15);
+            lblRxCrc.Size = new Size(35, 19);
             lblRxCrc.TabIndex = 44;
             lblRxCrc.Text = "CRC";
             // 
@@ -181,77 +182,77 @@ namespace ModbusTester
             // 
             lblRxDataCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblRxDataCount.AutoSize = true;
-            lblRxDataCount.Location = new Point(37, 143);
+            lblRxDataCount.Location = new Point(30, 147);
             lblRxDataCount.Name = "lblRxDataCount";
-            lblRxDataCount.Size = new Size(64, 15);
+            lblRxDataCount.Size = new Size(76, 19);
             lblRxDataCount.TabIndex = 43;
             lblRxDataCount.Text = "DataCount";
             // 
             // txtRxFc
             // 
-            txtRxFc.Location = new Point(107, 55);
+            txtRxFc.Location = new Point(108, 57);
             txtRxFc.Name = "txtRxFc";
             txtRxFc.ReadOnly = true;
-            txtRxFc.Size = new Size(108, 23);
+            txtRxFc.Size = new Size(108, 25);
             txtRxFc.TabIndex = 42;
             // 
             // txtRxStart
             // 
-            txtRxStart.Location = new Point(107, 84);
+            txtRxStart.Location = new Point(108, 87);
             txtRxStart.Name = "txtRxStart";
             txtRxStart.ReadOnly = true;
-            txtRxStart.Size = new Size(108, 23);
+            txtRxStart.Size = new Size(108, 25);
             txtRxStart.TabIndex = 41;
             // 
             // txtRxCount
             // 
-            txtRxCount.Location = new Point(107, 112);
+            txtRxCount.Location = new Point(108, 117);
             txtRxCount.Name = "txtRxCount";
             txtRxCount.ReadOnly = true;
-            txtRxCount.Size = new Size(108, 23);
+            txtRxCount.Size = new Size(108, 25);
             txtRxCount.TabIndex = 40;
             // 
             // txtRxSlave
             // 
-            txtRxSlave.Location = new Point(107, 27);
+            txtRxSlave.Location = new Point(108, 27);
             txtRxSlave.Name = "txtRxSlave";
             txtRxSlave.ReadOnly = true;
-            txtRxSlave.Size = new Size(108, 23);
+            txtRxSlave.Size = new Size(108, 25);
             txtRxSlave.TabIndex = 37;
             // 
             // lblRxRegisterCount
             // 
             lblRxRegisterCount.AutoSize = true;
-            lblRxRegisterCount.Location = new Point(16, 113);
+            lblRxRegisterCount.Location = new Point(6, 121);
             lblRxRegisterCount.Name = "lblRxRegisterCount";
-            lblRxRegisterCount.Size = new Size(85, 15);
+            lblRxRegisterCount.Size = new Size(100, 19);
             lblRxRegisterCount.TabIndex = 28;
             lblRxRegisterCount.Text = "Register Count";
             // 
             // lblRxStartRegister
             // 
             lblRxStartRegister.AutoSize = true;
-            lblRxStartRegister.Location = new Point(25, 85);
+            lblRxStartRegister.Location = new Point(15, 91);
             lblRxStartRegister.Name = "lblRxStartRegister";
-            lblRxStartRegister.Size = new Size(76, 15);
+            lblRxStartRegister.Size = new Size(91, 19);
             lblRxStartRegister.TabIndex = 27;
             lblRxStartRegister.Text = "Start Register";
             // 
             // lblRxFunctionCode
             // 
             lblRxFunctionCode.AutoSize = true;
-            lblRxFunctionCode.Location = new Point(16, 57);
+            lblRxFunctionCode.Location = new Point(8, 61);
             lblRxFunctionCode.Name = "lblRxFunctionCode";
-            lblRxFunctionCode.Size = new Size(85, 15);
+            lblRxFunctionCode.Size = new Size(98, 19);
             lblRxFunctionCode.TabIndex = 25;
             lblRxFunctionCode.Text = "Function Code";
             // 
             // lblRxSlaveAddress
             // 
             lblRxSlaveAddress.AutoSize = true;
-            lblRxSlaveAddress.Location = new Point(22, 28);
+            lblRxSlaveAddress.Location = new Point(13, 31);
             lblRxSlaveAddress.Name = "lblRxSlaveAddress";
-            lblRxSlaveAddress.Size = new Size(79, 15);
+            lblRxSlaveAddress.Size = new Size(93, 19);
             lblRxSlaveAddress.TabIndex = 23;
             lblRxSlaveAddress.Text = "Slave Address";
             // 
@@ -259,13 +260,13 @@ namespace ModbusTester
             // 
             gridRx.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             gridRx.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
-            gridRx.Columns.AddRange(new DataGridViewColumn[] { colRxReg, colRxNick, colRxHex, colRxDec, colRxBit });
-            gridRx.Location = new Point(228, 28);
+            gridRx.Columns.AddRange(new DataGridViewColumn[] { colRxReg, colRxNick, colRxHex, colRxDec, colRxBit, colRxQuickView });
+            gridRx.Location = new Point(227, 23);
             gridRx.Name = "gridRx";
             gridRx.RowHeadersVisible = false;
             gridRx.RowHeadersWidth = 62;
             gridRx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            gridRx.Size = new Size(406, 375);
+            gridRx.Size = new Size(453, 375);
             gridRx.TabIndex = 0;
             gridRx.CellBeginEdit += Grid_CellBeginEdit;
             gridRx.CellEndEdit += HexAutoFormat_OnEndEdit;
@@ -306,6 +307,15 @@ namespace ModbusTester
             colRxBit.Name = "colRxBit";
             colRxBit.ReadOnly = true;
             // 
+            // colRxQuickView
+            // 
+            colRxQuickView.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+            colRxQuickView.HeaderText = "QV";
+            colRxQuickView.Name = "colRxQuickView";
+            colRxQuickView.Resizable = DataGridViewTriState.True;
+            colRxQuickView.SortMode = DataGridViewColumnSortMode.Automatic;
+            colRxQuickView.Width = 30;
+            // 
             // grpOpt
             // 
             grpOpt.Anchor = AnchorStyles.Top | AnchorStyles.Right;
@@ -315,10 +325,9 @@ namespace ModbusTester
             grpOpt.Controls.Add(label19);
             grpOpt.Controls.Add(cmbRecordEvery);
             grpOpt.Controls.Add(chkRecording);
-            grpOpt.Controls.Add(label18);
-            grpOpt.Location = new Point(1055, 438);
+            grpOpt.Location = new Point(1113, 438);
             grpOpt.Name = "grpOpt";
-            grpOpt.Size = new Size(260, 154);
+            grpOpt.Size = new Size(260, 222);
             grpOpt.TabIndex = 3;
             grpOpt.TabStop = false;
             grpOpt.Text = "Recording / Polling";
@@ -328,9 +337,9 @@ namespace ModbusTester
             btnPollStop.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
             btnPollStop.Location = new Point(138, 110);
             btnPollStop.Name = "btnPollStop";
-            btnPollStop.Size = new Size(100, 30);
+            btnPollStop.Size = new Size(100, 32);
             btnPollStop.TabIndex = 6;
-            btnPollStop.Text = "STOP";
+            btnPollStop.Text = "Stop";
             btnPollStop.UseVisualStyleBackColor = true;
             btnPollStop.Click += btnPollStop_Click;
             // 
@@ -339,29 +348,29 @@ namespace ModbusTester
             btnPollStart.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
             btnPollStart.Location = new Point(20, 110);
             btnPollStart.Name = "btnPollStart";
-            btnPollStart.Size = new Size(100, 30);
+            btnPollStart.Size = new Size(100, 32);
             btnPollStart.TabIndex = 5;
-            btnPollStart.Text = "START";
+            btnPollStart.Text = "Start";
             btnPollStart.UseVisualStyleBackColor = true;
             btnPollStart.Click += btnPollStart_Click;
             // 
             // numInterval
             // 
             numInterval.Increment = new decimal(new int[] { 50, 0, 0, 0 });
-            numInterval.Location = new Point(88, 73);
+            numInterval.Location = new Point(116, 77);
             numInterval.Maximum = new decimal(new int[] { 60000, 0, 0, 0 });
             numInterval.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
             numInterval.Name = "numInterval";
-            numInterval.Size = new Size(150, 23);
+            numInterval.Size = new Size(122, 25);
             numInterval.TabIndex = 4;
             numInterval.Value = new decimal(new int[] { 200, 0, 0, 0 });
             // 
             // label19
             // 
             label19.AutoSize = true;
-            label19.Location = new Point(20, 75);
+            label19.Location = new Point(49, 77);
             label19.Name = "label19";
-            label19.Size = new Size(46, 15);
+            label19.Size = new Size(55, 19);
             label19.TabIndex = 3;
             label19.Text = "Interval";
             // 
@@ -370,30 +379,21 @@ namespace ModbusTester
             cmbRecordEvery.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbRecordEvery.FormattingEnabled = true;
             cmbRecordEvery.Items.AddRange(new object[] { "1 sec", "5 sec", "10 sec", "30 sec", "60 sec" });
-            cmbRecordEvery.Location = new Point(163, 34);
+            cmbRecordEvery.Location = new Point(116, 40);
             cmbRecordEvery.Name = "cmbRecordEvery";
-            cmbRecordEvery.Size = new Size(75, 23);
+            cmbRecordEvery.Size = new Size(122, 25);
             cmbRecordEvery.TabIndex = 2;
             // 
             // chkRecording
             // 
             chkRecording.AutoSize = true;
-            chkRecording.Location = new Point(88, 36);
+            chkRecording.Location = new Point(20, 40);
             chkRecording.Name = "chkRecording";
-            chkRecording.Size = new Size(80, 19);
+            chkRecording.Size = new Size(89, 23);
             chkRecording.TabIndex = 1;
             chkRecording.Text = "Recording";
             chkRecording.UseVisualStyleBackColor = true;
             chkRecording.CheckedChanged += chkRecording_CheckedChanged;
-            // 
-            // label18
-            // 
-            label18.AutoSize = true;
-            label18.Location = new Point(20, 37);
-            label18.Name = "label18";
-            label18.Size = new Size(58, 15);
-            label18.TabIndex = 0;
-            label18.Text = "Log every";
             // 
             // grpLog
             // 
@@ -403,7 +403,7 @@ namespace ModbusTester
             grpLog.Controls.Add(txtLog);
             grpLog.Location = new Point(12, 438);
             grpLog.Name = "grpLog";
-            grpLog.Size = new Size(1034, 222);
+            grpLog.Size = new Size(1092, 222);
             grpLog.TabIndex = 4;
             grpLog.TabStop = false;
             grpLog.Text = "Message (HEX Log)";
@@ -411,7 +411,7 @@ namespace ModbusTester
             // btnSaveLog
             // 
             btnSaveLog.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSaveLog.Location = new Point(948, 17);
+            btnSaveLog.Location = new Point(1006, 17);
             btnSaveLog.Name = "btnSaveLog";
             btnSaveLog.Size = new Size(80, 32);
             btnSaveLog.TabIndex = 2;
@@ -422,7 +422,7 @@ namespace ModbusTester
             // btnLogClear
             // 
             btnLogClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnLogClear.Location = new Point(862, 17);
+            btnLogClear.Location = new Point(920, 17);
             btnLogClear.Name = "btnLogClear";
             btnLogClear.Size = new Size(80, 32);
             btnLogClear.TabIndex = 1;
@@ -437,7 +437,7 @@ namespace ModbusTester
             txtLog.Location = new Point(11, 54);
             txtLog.Name = "txtLog";
             txtLog.ReadOnly = true;
-            txtLog.Size = new Size(1017, 160);
+            txtLog.Size = new Size(1075, 160);
             txtLog.TabIndex = 0;
             txtLog.Text = "";
             txtLog.WordWrap = false;
@@ -451,13 +451,15 @@ namespace ModbusTester
             gridTx.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             gridTx.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.AutoSize;
             gridTx.Columns.AddRange(new DataGridViewColumn[] { colTxReg, colTxNick, colTxHex, colTxDec, colTxBit });
-            gridTx.Location = new Point(234, 23);
+            gridTx.Location = new Point(229, 23);
             gridTx.Name = "gridTx";
             gridTx.RowHeadersVisible = false;
             gridTx.RowHeadersWidth = 62;
             gridTx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            gridTx.Size = new Size(405, 375);
+            gridTx.Size = new Size(426, 375);
             gridTx.TabIndex = 105;
+            gridTx.CellBeginEdit += Grid_CellBeginEdit;
+            gridTx.CellEndEdit += HexAutoFormat_OnEndEdit;
             // 
             // colTxReg
             // 
@@ -494,28 +496,28 @@ namespace ModbusTester
             // lblTxSlaveAddress
             // 
             lblTxSlaveAddress.AutoSize = true;
-            lblTxSlaveAddress.Location = new Point(22, 23);
+            lblTxSlaveAddress.Location = new Point(12, 27);
             lblTxSlaveAddress.Name = "lblTxSlaveAddress";
-            lblTxSlaveAddress.Size = new Size(79, 15);
+            lblTxSlaveAddress.Size = new Size(93, 19);
             lblTxSlaveAddress.TabIndex = 98;
             lblTxSlaveAddress.Text = "Slave Address";
             // 
             // numSlave
             // 
-            numSlave.Location = new Point(109, 23);
+            numSlave.Location = new Point(109, 27);
             numSlave.Maximum = new decimal(new int[] { 247, 0, 0, 0 });
             numSlave.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numSlave.Name = "numSlave";
-            numSlave.Size = new Size(108, 23);
+            numSlave.Size = new Size(108, 25);
             numSlave.TabIndex = 99;
             numSlave.Value = new decimal(new int[] { 1, 0, 0, 0 });
             // 
             // lblTxFunctionCode
             // 
             lblTxFunctionCode.AutoSize = true;
-            lblTxFunctionCode.Location = new Point(16, 52);
+            lblTxFunctionCode.Location = new Point(7, 57);
             lblTxFunctionCode.Name = "lblTxFunctionCode";
-            lblTxFunctionCode.Size = new Size(85, 15);
+            lblTxFunctionCode.Size = new Size(98, 19);
             lblTxFunctionCode.TabIndex = 100;
             lblTxFunctionCode.Text = "Function Code";
             // 
@@ -524,53 +526,53 @@ namespace ModbusTester
             cmbFunctionCode.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbFunctionCode.FormattingEnabled = true;
             cmbFunctionCode.Items.AddRange(new object[] { "03h Read HR", "04h Read IR", "06h Write SR", "10h Write MR" });
-            cmbFunctionCode.Location = new Point(109, 50);
+            cmbFunctionCode.Location = new Point(109, 57);
             cmbFunctionCode.Name = "cmbFunctionCode";
-            cmbFunctionCode.Size = new Size(108, 23);
+            cmbFunctionCode.Size = new Size(108, 25);
             cmbFunctionCode.TabIndex = 101;
             // 
             // lblTxStartRegister
             // 
             lblTxStartRegister.AutoSize = true;
-            lblTxStartRegister.Location = new Point(25, 80);
+            lblTxStartRegister.Location = new Point(14, 87);
             lblTxStartRegister.Name = "lblTxStartRegister";
-            lblTxStartRegister.Size = new Size(76, 15);
+            lblTxStartRegister.Size = new Size(91, 19);
             lblTxStartRegister.TabIndex = 102;
             lblTxStartRegister.Text = "Start Register";
             // 
             // lblTxRegisterCount
             // 
             lblTxRegisterCount.AutoSize = true;
-            lblTxRegisterCount.Location = new Point(16, 108);
+            lblTxRegisterCount.Location = new Point(5, 117);
             lblTxRegisterCount.Name = "lblTxRegisterCount";
-            lblTxRegisterCount.Size = new Size(85, 15);
+            lblTxRegisterCount.Size = new Size(100, 19);
             lblTxRegisterCount.TabIndex = 103;
             lblTxRegisterCount.Text = "Register Count";
             // 
             // numCount
             // 
-            numCount.Location = new Point(109, 106);
+            numCount.Location = new Point(109, 117);
             numCount.Maximum = new decimal(new int[] { 125, 0, 0, 0 });
             numCount.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numCount.Name = "numCount";
-            numCount.Size = new Size(108, 23);
+            numCount.Size = new Size(108, 25);
             numCount.TabIndex = 104;
             numCount.Value = new decimal(new int[] { 1, 0, 0, 0 });
             // 
             // numStartRegister
             // 
-            numStartRegister.Location = new Point(109, 77);
+            numStartRegister.Location = new Point(109, 87);
             numStartRegister.Name = "numStartRegister";
-            numStartRegister.Size = new Size(108, 23);
+            numStartRegister.Size = new Size(108, 25);
             numStartRegister.TabIndex = 106;
             // 
             // lblTxDataCount
             // 
             lblTxDataCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblTxDataCount.AutoSize = true;
-            lblTxDataCount.Location = new Point(37, 132);
+            lblTxDataCount.Location = new Point(31, 147);
             lblTxDataCount.Name = "lblTxDataCount";
-            lblTxDataCount.Size = new Size(64, 15);
+            lblTxDataCount.Size = new Size(76, 19);
             lblTxDataCount.TabIndex = 107;
             lblTxDataCount.Text = "DataCount";
             // 
@@ -578,102 +580,109 @@ namespace ModbusTester
             // 
             lblTxCrc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblTxCrc.AutoSize = true;
-            lblTxCrc.Location = new Point(71, 160);
+            lblTxCrc.Location = new Point(72, 177);
             lblTxCrc.Name = "lblTxCrc";
-            lblTxCrc.Size = new Size(30, 15);
+            lblTxCrc.Size = new Size(35, 19);
             lblTxCrc.TabIndex = 108;
             lblTxCrc.Text = "CRC";
             // 
             // btnCalcCrc
             // 
             btnCalcCrc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnCalcCrc.Location = new Point(16, 191);
+            btnCalcCrc.Location = new Point(8, 272);
             btnCalcCrc.Name = "btnCalcCrc";
-            btnCalcCrc.Size = new Size(95, 44);
+            btnCalcCrc.Size = new Size(100, 32);
             btnCalcCrc.TabIndex = 109;
             btnCalcCrc.Text = "Calc CRC";
             btnCalcCrc.UseVisualStyleBackColor = true;
+            btnCalcCrc.Click += btnCalcCrc_Click;
             // 
             // btnSend
             // 
             btnSend.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSend.Location = new Point(120, 191);
+            btnSend.Location = new Point(117, 272);
             btnSend.Name = "btnSend";
-            btnSend.Size = new Size(95, 44);
+            btnSend.Size = new Size(100, 32);
             btnSend.TabIndex = 110;
-            btnSend.Text = "SEND";
+            btnSend.Text = "Send";
             btnSend.UseVisualStyleBackColor = true;
+            btnSend.Click += btnSend_Click;
             // 
             // txtDataCount
             // 
-            txtDataCount.Location = new Point(109, 133);
+            txtDataCount.Location = new Point(109, 147);
             txtDataCount.Name = "txtDataCount";
-            txtDataCount.Size = new Size(108, 23);
+            txtDataCount.Size = new Size(108, 25);
             txtDataCount.TabIndex = 112;
             // 
             // txtCrc
             // 
-            txtCrc.Location = new Point(109, 162);
+            txtCrc.Location = new Point(109, 177);
             txtCrc.Name = "txtCrc";
-            txtCrc.Size = new Size(108, 23);
+            txtCrc.Size = new Size(108, 25);
             txtCrc.TabIndex = 111;
             // 
             // lblPreset
             // 
             lblPreset.AutoSize = true;
-            lblPreset.Location = new Point(16, 260);
+            lblPreset.Location = new Point(5, 207);
             lblPreset.Name = "lblPreset";
-            lblPreset.Size = new Size(39, 15);
+            lblPreset.Size = new Size(47, 19);
             lblPreset.TabIndex = 114;
             lblPreset.Text = "Preset";
             // 
             // cmbPreset
             // 
             cmbPreset.FormattingEnabled = true;
-            cmbPreset.Location = new Point(61, 257);
+            cmbPreset.Location = new Point(57, 207);
             cmbPreset.Name = "cmbPreset";
-            cmbPreset.Size = new Size(156, 23);
+            cmbPreset.Size = new Size(160, 25);
             cmbPreset.TabIndex = 115;
+            cmbPreset.SelectedIndexChanged += cmbPreset_SelectedIndexChanged;
             // 
             // btnPresetDelete
             // 
             btnPresetDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetDelete.Location = new Point(122, 288);
+            btnPresetDelete.Location = new Point(117, 237);
             btnPresetDelete.Name = "btnPresetDelete";
-            btnPresetDelete.Size = new Size(95, 44);
+            btnPresetDelete.Size = new Size(100, 32);
             btnPresetDelete.TabIndex = 116;
             btnPresetDelete.Text = "Delete";
             btnPresetDelete.UseVisualStyleBackColor = true;
+            btnPresetDelete.Click += btnPresetDelete_Click;
             // 
             // btnPresetSave
             // 
             btnPresetSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetSave.Location = new Point(16, 288);
+            btnPresetSave.Location = new Point(8, 237);
             btnPresetSave.Name = "btnPresetSave";
-            btnPresetSave.Size = new Size(95, 44);
+            btnPresetSave.Size = new Size(100, 32);
             btnPresetSave.TabIndex = 117;
             btnPresetSave.Text = "Save";
             btnPresetSave.UseVisualStyleBackColor = true;
+            btnPresetSave.Click += btnPresetSave_Click;
             // 
             // btnTxClear
             // 
             btnTxClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnTxClear.Location = new Point(16, 338);
+            btnTxClear.Location = new Point(8, 307);
             btnTxClear.Name = "btnTxClear";
-            btnTxClear.Size = new Size(95, 44);
+            btnTxClear.Size = new Size(100, 32);
             btnTxClear.TabIndex = 113;
-            btnTxClear.Text = "CLEAR";
+            btnTxClear.Text = "Clear";
             btnTxClear.UseVisualStyleBackColor = true;
+            btnTxClear.Click += btnTxClear_Click;
             // 
             // btnRestore
             // 
             btnRestore.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnRestore.Location = new Point(122, 338);
+            btnRestore.Location = new Point(117, 307);
             btnRestore.Name = "btnRestore";
-            btnRestore.Size = new Size(95, 44);
+            btnRestore.Size = new Size(100, 32);
             btnRestore.TabIndex = 118;
             btnRestore.Text = "Restore";
             btnRestore.UseVisualStyleBackColor = true;
+            btnRestore.Click += btnRestore_Click;
             // 
             // grpTx
             // 
@@ -699,23 +708,23 @@ namespace ModbusTester
             grpTx.Controls.Add(numSlave);
             grpTx.Controls.Add(lblTxSlaveAddress);
             grpTx.Controls.Add(gridTx);
-            grpTx.Location = new Point(0, 0);
+            grpTx.Location = new Point(12, 12);
             grpTx.Name = "grpTx";
-            grpTx.Size = new Size(654, 420);
+            grpTx.Size = new Size(665, 420);
             grpTx.TabIndex = 0;
             grpTx.TabStop = false;
-            grpTx.Text = "Transmit (Send)";
+            grpTx.Text = "Transmit";
             // 
             // FormMain
             // 
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(1327, 672);
+            ClientSize = new Size(1385, 672);
             Controls.Add(grpTx);
             Controls.Add(grpLog);
             Controls.Add(grpOpt);
             Controls.Add(grpRx);
-            Font = new Font("Segoe UI", 9F);
+            Font = new Font("Segoe UI", 10F);
             MinimumSize = new Size(1212, 711);
             Name = "FormMain";
             Text = "Modbus Tester";
@@ -746,7 +755,6 @@ namespace ModbusTester
         private Label label19;
         private ComboBox cmbRecordEvery;
         private CheckBox chkRecording;
-        private Label label18;
         private GroupBox grpLog;
         private Button btnSaveLog;
         private Button btnLogClear;
@@ -767,11 +775,6 @@ namespace ModbusTester
         private Label lblRxCrc;
         private Label lblRxDataCount;
         private Button btnQuickView;
-        private DataGridViewTextBoxColumn colRxReg;
-        private DataGridViewTextBoxColumn colRxNick;
-        private DataGridViewTextBoxColumn colRxHex;
-        private DataGridViewTextBoxColumn colRxDec;
-        private DataGridViewTextBoxColumn colRxBit;
         private GroupBox grpTx;
         private Button btnRestore;
         private Button btnTxClear;
@@ -799,5 +802,11 @@ namespace ModbusTester
         private DataGridViewTextBoxColumn colTxHex;
         private DataGridViewTextBoxColumn colTxDec;
         private DataGridViewTextBoxColumn colTxBit;
+        private DataGridViewTextBoxColumn colRxReg;
+        private DataGridViewTextBoxColumn colRxNick;
+        private DataGridViewTextBoxColumn colRxHex;
+        private DataGridViewTextBoxColumn colRxDec;
+        private DataGridViewTextBoxColumn colRxBit;
+        private DataGridViewCheckBoxColumn colRxQuickView;
     }
 }

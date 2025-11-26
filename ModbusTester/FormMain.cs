@@ -1,4 +1,5 @@
 ﻿using System;                        // .NET 기본 네임스페이스(기본 타입, 이벤트 등)
+using System.Collections.Generic;    // List<T>, 등
 using System.Drawing;               // GDI+ 관련 타입(폼 컨트롤의 색/폰트/이미지 등)
 using System.IO;                    // 파일/스트림 입출력 (Recording에 사용)
 using System.IO.Ports;              // 시리얼 포트 API
@@ -12,13 +13,15 @@ using System.Globalization;         // 16진수 파싱(NumberStyles 등)
 using ModbusTester.Modbus;
 using ModbusTester.Services;
 
-namespace ModbusTester              // 프로젝트 네임스페이스
+namespace ModbusTester
 {
-    public partial class FormMain : Form   // WinForms의 메인 폼 클래스(디자이너 분할 클래스)
+    public partial class FormMain : Form
     {
         // ───────────────────────── Fields ─────────────────────────
+
+        private readonly LayoutScaler _layoutScaler;
+
         // COM Setting에서 넘겨줌 (Master 모드에서만 사용 가능)
-        // COM Setting에서 넘겨줌 (Master 모드에서만 사용)
         private readonly SerialPort? _sp;
         private readonly ModbusSlave? _slave;
         private readonly bool _slaveMode;
@@ -31,8 +34,10 @@ namespace ModbusTester              // 프로젝트 네임스페이스
         private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
 
         // Recording 
-        private readonly RecordingService _recService = new RecordingService("C:\\Users\\haeul\\source\\repos\\ModbusTester\\Data");
-        // Quick View
+        private readonly RecordingService _recService =
+            new RecordingService("C:\\Users\\haeul\\source\\repos\\ModbusTester\\Data");
+
+        // QuickView 폼
         private FormQuickView? _quick;
 
         // Register 주소 범위
@@ -47,11 +52,26 @@ namespace ModbusTester              // 프로젝트 네임스페이스
         private const int COL_DEC = 3;
         private const int COL_BIT = 4;
 
-        // ───────────────────────── Ctor ─────────────────────────
+        // TX 그리드 실행취소용 스냅샷
+        private class TxRowSnapshot
+        {
+            public string Reg = "";
+            public string Name = "";
+            public string Hex = "";
+            public string Dec = "";
+            public string Bit = "";
+        }
+        private List<TxRowSnapshot>? _lastTxSnapshot;
+
+        // ───────────────────────── 생성자 ─────────────────────────
+
         public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
         {
             InitializeComponent();
-            this.StartPosition = FormStartPosition.CenterScreen;
+            StartPosition = FormStartPosition.CenterScreen;
+
+            _layoutScaler = new LayoutScaler(this);
+            _layoutScaler.ApplyInitialScale(1.0f);
 
             _sp = sp;
             _slave = slave;
@@ -67,15 +87,9 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 _poller = new ModbusPoller(_client);
             }
 
-            this.Shown += FormMain_Shown;
-
-            btnPresetSave.Click += btnPresetSave_Click;
-            btnPresetDelete.Click += btnPresetDelete_Click;
-            cmbPreset.SelectedIndexChanged += cmbPreset_SelectedIndexChanged;
-
+            Shown += FormMain_Shown;
             numSlave.Value = slaveId;
         }
-
 
         // 폼이 화면에 표시된 직후 호출됨
         private async void FormMain_Shown(object? sender, EventArgs e)
@@ -84,36 +98,42 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             await InitializeGridsAsync();
         }
 
-        // ───────────────────────── Load ─────────────────────────
+        // ───────────────────────── Load & 초기화 ─────────────────────────
+
         private void FormMain_Load(object sender, EventArgs e)
         {
             // Function Code 기본값
             if (cmbFunctionCode.Items.Count == 0)
-                cmbFunctionCode.Items.AddRange(new object[] { "03h Read HR", "04h Read IR", "06h Write SR", "10h Write MR" }); // FC 선택지
+                cmbFunctionCode.Items.AddRange(new object[] { "03h Read HR", "04h Read IR", "06h Write SR", "10h Write MR" });
             if (cmbFunctionCode.SelectedIndex < 0)
                 cmbFunctionCode.SelectedIndex = 0;         // 기본 03h 선택
 
             // TX 기본
-            numStartRegister.Hexadecimal = true;           // 시작 레지스터를 16진수 표현으로 사용
-            numStartRegister.Minimum = 0x0000;             // 최소 주소 0000h
-            numStartRegister.Maximum = 0xFFFF;             // 최대 주소 FFFFh
-            numStartRegister.Value = 0x0000;               // 기본값 0000h
-            numCount.Value = 1;                            // 기본 레지스터 개수 1
-            RefreshDataCount();                            // FC/Count에 맞춰 DataCount 텍스트 갱신
+            numStartRegister.Hexadecimal = true;
+            numStartRegister.Minimum = 0x0000;
+            numStartRegister.Maximum = 0xFFFF;
+            numStartRegister.Value = 0x0000;
+            numCount.Value = 1;
+            RefreshDataCount();
 
             // 그리드 공통 스타일
-            SetupGrid(gridTx);                             // TX 그리드 스타일 설정
-            SetupGrid(gridRx);                             // RX 그리드 스타일 설정
+            SetupGrid(gridTx);
+            SetupGrid(gridRx);
+
+            // QV 컬럼 화면 왼쪽으로
+            var qvCol = gridRx.Columns["colRxQuickView"];
+            if (qvCol != null)
+                qvCol.DisplayIndex = 0;
 
             // 모드에 따른 UI 반영
-            UpdateUiByMode();                              // 현재 모드(Slave 체크박스)에 맞춰 UI 잠금/해제
+            UpdateUiByMode();
 
             // 프리셋 로드
             FunctionPresetManager.Load();
             RefreshPresetCombo();
         }
 
-        // 폼이 뜬 뒤 TX/RX 그리드에 0000h ~ FFFFh 주소를 비동기로 채워 넣는 메서드
+        // 폼이 뜬 뒤 TX/RX 그리드에 0000h ~ GridRegisterMax 주소를 비동기로 채워 넣는 메서드
         private async Task InitializeGridsAsync()
         {
             gridTx.SuspendLayout();
@@ -144,6 +164,8 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             }
         }
 
+        // ───────────────────────── 모드/공통 UI ─────────────────────────
+
         // 모드(마스터/슬레이브)에 따른 UI 잠금
         private void UpdateUiByMode()
         {
@@ -166,7 +188,7 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             UpdateUiByMode();
         }
 
-        // ───────────────────────── UI Helpers ─────────────────────────
+        // 그리드 공통 셋업
         private void SetupGrid(DataGridView g)
         {
             g.AllowUserToAddRows = false;
@@ -174,23 +196,23 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
             g.SelectionMode = DataGridViewSelectionMode.CellSelect;
             g.EditMode = DataGridViewEditMode.EditOnEnter;
+
+            // 전체는 비율로 채우기
             g.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
-            // 셀 기본 가운데 정렬
+            // 기본 가운데 정렬
             g.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
-
-            // 헤더 텍스트도 가운데 정렬
             g.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
-            // 모든 열 정렬 불가
+            // 정렬 막기
             foreach (DataGridViewColumn col in g.Columns)
                 col.SortMode = DataGridViewColumnSortMode.NotSortable;
 
-            // 열 5개(Register, Name, HEX, DEC, BIT)를 기준으로 폭/읽기전용 설정
+            // Register / Name / HEX / DEC / BIT 비율 설정
             if (g.Columns.Count >= 5)
             {
                 g.Columns[COL_REG].FillWeight = 80;   // Register
-                g.Columns[COL_NAME].FillWeight = 120;  // Name
+                g.Columns[COL_NAME].FillWeight = 100; // Name
                 g.Columns[COL_HEX].FillWeight = 80;   // HEX
                 g.Columns[COL_DEC].FillWeight = 80;   // DEC
                 g.Columns[COL_BIT].FillWeight = 180;  // BIT
@@ -201,6 +223,15 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 g.Columns[COL_DEC].ReadOnly = false;
                 g.Columns[COL_BIT].ReadOnly = false;
             }
+
+            // QV 체크박스 컬럼은 있으면 따로 고정폭으로 처리
+            var qvCol = g.Columns["colRxQuickView"];
+            if (qvCol != null)
+            {
+                qvCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                qvCol.Width = 30;              // 체크박스 딱 맞는 폭
+                qvCol.ReadOnly = false;        // 체크 가능해야 하니까
+            }
         }
 
         // Register 컬럼은 첫 줄만 편집 가능하게 만들기 위한 핸들러
@@ -208,18 +239,22 @@ namespace ModbusTester              // 프로젝트 네임스페이스
         {
             var g = (DataGridView)sender;
 
-            if (e.ColumnIndex == 0 && e.RowIndex != 0)
+            if (e.ColumnIndex == COL_REG && e.RowIndex != 0)
             {
                 e.Cancel = true;
                 return;
             }
         }
+
+        // ───────────────────────── BIT / 값 변환 ─────────────────────────
+
         private static string ToBitString(ushort v)
         {
             // "0000000000000000" → "0000 0000 0000 0000"
             string s = Convert.ToString(v, 2).PadLeft(16, '0');
             return string.Join(" ", Enumerable.Range(0, 4).Select(i => s.Substring(i * 4, 4)));
         }
+
         private void UpdateBitCell(DataGridViewRow row)
         {
             if (row == null || row.IsNewRow) return;
@@ -241,7 +276,47 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             row.Cells[COL_BIT].Value = ToBitString(v);
         }
 
-        // ───────────────────────── Events (TX/RX Controls) ─────────────────────────
+        private static bool TryParseUShortFromHex(string s, out ushort value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+            s = s.Trim();
+            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
+                s = s[2..];
+            if (s.EndsWith("h", StringComparison.OrdinalIgnoreCase))
+                s = s[..^1];
+            return ushort.TryParse(s, NumberStyles.HexNumber, null, out value);
+        }
+
+        private static bool TryParseUShortFromBitString(string s, out ushort value)
+        {
+            value = 0;
+            if (string.IsNullOrWhiteSpace(s)) return false;
+
+            // 0,1만 남기고 나머지(공백 등)는 제거
+            s = new string(s.Where(ch => ch == '0' || ch == '1').ToArray());
+            if (s.Length == 0) return false;
+
+            // 16비트 초과면 뒤쪽 16비트만 사용
+            if (s.Length > 16)
+                s = s[^16..];
+
+            // 16비트 미만이면 왼쪽을 0으로 채움
+            s = s.PadLeft(16, '0');
+
+            try
+            {
+                value = Convert.ToUInt16(s, 2);   // 2진수 → ushort
+                return true;
+            }
+            catch
+            {
+                return false;
+            }
+        }
+
+        // ───────────────────────── 버튼/이벤트 (TX/RX) ─────────────────────────
+
         private void btnCalcCrc_Click(object sender, EventArgs e)
         {
             try
@@ -320,7 +395,11 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 MessageBox.Show("지금은 Slave 모드입니다. Master 모드에서 전송하세요.");
                 return;
             }
-            if (!_isOpen) { MessageBox.Show("먼저 포트를 OPEN 하세요."); return; }
+            if (!_isOpen)
+            {
+                MessageBox.Show("먼저 포트를 OPEN 하세요.");
+                return;
+            }
             if (_client == null)
             {
                 MessageBox.Show("통신 클라이언트가 초기화되지 않았습니다.");
@@ -382,60 +461,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             catch (Exception ex)
             {
                 MessageBox.Show("전송 실패: " + ex.Message);
-            }
-        }
-        // TX 그리드 실행취소용 스냅샷
-        private class TxRowSnapshot
-        {
-            public string Reg = "";
-            public string Name = "";
-            public string Hex = "";
-            public string Dec = "";
-            public string Bit = "";
-        }
-
-        private List<TxRowSnapshot>? _lastTxSnapshot;
-
-        private void SaveTxSnapshot()
-        {
-            var list = new List<TxRowSnapshot>();
-
-            foreach (DataGridViewRow r in gridTx.Rows)
-            {
-                if (r.IsNewRow) continue;
-
-                list.Add(new TxRowSnapshot
-                {
-                    Reg = Convert.ToString(r.Cells[COL_REG].Value) ?? "",
-                    Name = Convert.ToString(r.Cells[COL_NAME].Value) ?? "",
-                    Hex = Convert.ToString(r.Cells[COL_HEX].Value) ?? "",
-                    Dec = Convert.ToString(r.Cells[COL_DEC].Value) ?? "",
-                    Bit = Convert.ToString(r.Cells[COL_BIT].Value) ?? "",
-                });
-            }
-
-            _lastTxSnapshot = list;
-        }
-
-        private void RestoreTxSnapshot()
-        {
-            if (_lastTxSnapshot == null) return;
-            if (gridTx.Rows.Count == 0) return;
-
-            int idx = 0;
-
-            foreach (DataGridViewRow r in gridTx.Rows)
-            {
-                if (r.IsNewRow) continue;
-                if (idx >= _lastTxSnapshot.Count) break;
-
-                var snap = _lastTxSnapshot[idx++];
-
-                r.Cells[COL_REG].Value = snap.Reg;
-                r.Cells[COL_NAME].Value = snap.Name;
-                r.Cells[COL_HEX].Value = snap.Hex;
-                r.Cells[COL_DEC].Value = snap.Dec;
-                r.Cells[COL_BIT].Value = snap.Bit;
             }
         }
 
@@ -511,16 +536,21 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
         private void btnSaveLog_Click(object sender, EventArgs e)
         {
-            using var sfd = new SaveFileDialog { Filter = "Text|*.txt", FileName = $"modbus_log_{DateTime.Now:yyyyMMdd_HHmmss}.txt" };
+            using var sfd = new SaveFileDialog
+            {
+                Filter = "Text|*.txt",
+                FileName = $"modbus_log_{DateTime.Now:yyyyMMdd_HHmmss}.txt"
+            };
             if (sfd.ShowDialog(this) == DialogResult.OK)
-                System.IO.File.WriteAllText(sfd.FileName, txtLog.Text);
+                File.WriteAllText(sfd.FileName, txtLog.Text);
         }
 
         private void numCount_ValueChanged(object sender, EventArgs e) => RefreshDataCount();
         private void cmbFunctionCode_SelectedIndexChanged(object sender, EventArgs e) => RefreshDataCount();
         private void cmbFunctionCode_TextChanged(object sender, EventArgs e) => RefreshDataCount();
 
-        // 폴링
+        // ───────────────────────── 폴링 ─────────────────────────
+
         private void btnPollStart_Click(object sender, EventArgs e)
         {
             if (_slaveMode)
@@ -528,12 +558,18 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 MessageBox.Show("Slave 모드에서는 폴링을 사용할 수 없습니다.");
                 return;
             }
+
             pollTimer.Interval = (int)numInterval.Value;
             pollTimer.Start();
+
+            // 폴링 상태가 바뀌었으니까 녹화 상태도 재조정
+            UpdateRecordingState();
         }
+
         private void btnPollStop_Click(object sender, EventArgs e)
         {
             pollTimer.Stop();
+            UpdateRecordingState();
         }
 
         private void pollTimer_Tick(object sender, EventArgs e)
@@ -549,14 +585,13 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 byte fc = GetFunctionCode();
                 if (!(fc == 0x03 || fc == 0x04)) return;
 
-                // 통신/프레임/파싱은 Poller에게 맡김
                 var result = _poller.Poll(slave, fc, start, count);
 
                 Log("TX: " + ToHex(result.Request));
                 Log("RX: " + ToHex(result.Response));
 
                 if (result.IsException)
-                    return;    // 예외 응답이면 UI 업데이트 안 함
+                    return;
 
                 UpdateReceiveHeader(result.Response, slave, fc, start, count);
                 FillRxGrid(start, result.Values);
@@ -594,11 +629,12 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             }
         }
 
-        // ───────────────────────── Helpers ─────────────────────────
+        // ───────────────────────── 로그/공통 Helper ─────────────────────────
+
         private void Log(string line)
         {
             txtLog.AppendText(line + Environment.NewLine);
-            _recService.Log(line);   // 파일 녹화는 서비스에게 위임
+            _recService.Log(line);
         }
 
         private static string ToHex(byte[] bytes)
@@ -613,7 +649,7 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             if (raw.EndsWith("h", StringComparison.OrdinalIgnoreCase)) raw = raw.Substring(0, raw.Length - 1);
             if (raw.Length == 1) raw = "0" + raw;
 
-            if (byte.TryParse(raw, System.Globalization.NumberStyles.HexNumber, null, out var fcHex))
+            if (byte.TryParse(raw, NumberStyles.HexNumber, null, out var fcHex))
                 return fcHex;
             if (byte.TryParse(raw, out var fcDec))
                 return fcDec;
@@ -630,47 +666,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 txtDataCount.Text = "2";
             else
                 txtDataCount.Text = "0";
-        }
-
-        // TX 그리드 입력 동기화(HEX<->DEC) – 현재는 사용 안 함(디자이너에서 HexAutoFormat_OnEndEdit 사용)
-        private void GridTx_CellEndEdit(object sender, DataGridViewCellEventArgs e)
-        {
-            if (e.RowIndex < 0) return;
-            var row = gridTx.Rows[e.RowIndex];
-            if (row.IsNewRow) return;
-
-            string hex = Convert.ToString(row.Cells[COL_HEX].Value) ?? "";
-            string dec = Convert.ToString(row.Cells[COL_DEC].Value) ?? "";
-
-            if (e.ColumnIndex == COL_HEX) // HEX 편집
-            {
-                if (TryParseUShortFromHex(hex, out ushort v))
-                    row.Cells[COL_DEC].Value = v.ToString();
-                else
-                    row.Cells[COL_DEC].Value = "";
-            }
-            else if (e.ColumnIndex == COL_DEC) // DEC 편집
-            {
-                if (ushort.TryParse(dec, out ushort v))
-                    row.Cells[COL_HEX].Value = $"{v:X4}";
-                else
-                    row.Cells[COL_HEX].Value = "";
-            }
-
-            // HEX/DEC가 바뀌었으면 BIT도 갱신
-            UpdateBitCell(row);
-        }
-
-        private static bool TryParseUShortFromHex(string s, out ushort value)
-        {
-            value = 0;
-            if (string.IsNullOrWhiteSpace(s)) return false;
-            s = s.Trim();
-            if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
-                s = s[2..];
-            if (s.EndsWith("h", StringComparison.OrdinalIgnoreCase))
-                s = s[..^1];
-            return ushort.TryParse(s, System.Globalization.NumberStyles.HexNumber, null, out value);
         }
 
         private ushort[] ReadTxValues(ushort count)
@@ -690,34 +685,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 return v2;
             return 0;
         }
-        private static bool TryParseUShortFromBitString(string s, out ushort value)
-        {
-            value = 0;
-            if (string.IsNullOrWhiteSpace(s)) return false;
-
-            // 0,1만 남기고 나머지(공백 등)는 제거
-            s = new string(s.Where(ch => ch == '0' || ch == '1').ToArray());
-            if (s.Length == 0) return false;
-
-            // 16비트 초과면 뒤쪽 16비트만 사용
-            if (s.Length > 16)
-                s = s[^16..];
-
-            // 16비트 미만이면 왼쪽을 0으로 채움
-            s = s.PadLeft(16, '0');
-
-            try
-            {
-                value = Convert.ToUInt16(s, 2);   // 2진수 → ushort
-                return true;
-            }
-            catch
-            {
-                return false;
-            }
-        }
-
-
 
         private void UpdateReceiveHeader(byte[] resp, byte slave, byte fc, ushort start, ushort count)
         {
@@ -733,11 +700,12 @@ namespace ModbusTester              // 프로젝트 네임스페이스
         }
 
         // ───────── Register 첫 줄 입력 기준으로 Register 컬럼 재배열 ─────────
+
         private void RebuildRegisterColumnFromFirstRow(DataGridView grid)
         {
             if (grid.Rows.Count == 0) return;
 
-            string raw = Convert.ToString(grid.Rows[0].Cells[0].Value) ?? "";
+            string raw = Convert.ToString(grid.Rows[0].Cells[COL_REG].Value) ?? "";
             raw = raw.Trim();
 
             if (raw.Length == 0)
@@ -775,7 +743,7 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
             ushort numericStart = (ushort)startInt;
 
-            grid.Rows[0].Cells[0].Value = $"{numericStart:X4}h";
+            grid.Rows[0].Cells[COL_REG].Value = $"{numericStart:X4}h";
 
             ushort addr = numericStart;
             bool wrapped = false;
@@ -786,7 +754,7 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 if (row.IsNewRow) continue;
 
                 addr = NextAddress(addr, ref wrapped);
-                row.Cells[0].Value = $"{addr:X4}h";
+                row.Cells[COL_REG].Value = $"{addr:X4}h";
             }
 
             if (ReferenceEquals(grid, gridTx))
@@ -856,7 +824,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 return;
             }
 
-            // 0=Register, 1=Name, 2=HEX, 3=DEC, 4=BIT
             if (e.ColumnIndex == COL_HEX)
             {
                 var hexCell = g.Rows[e.RowIndex].Cells[COL_HEX];
@@ -916,9 +883,9 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             }
             else if (e.ColumnIndex == COL_BIT)
             {
-                // RX 그리드에서는 BIT 편집을 무시하고 싶으면 이 체크 유지
+                // RX 그리드에서는 BIT 편집을 무시 (TX에서만 허용)
                 if (!ReferenceEquals(g, gridTx))
-                    return;   // TX 그리드에서만 BIT 입력 허용
+                    return;
 
                 var bitCell = g.Rows[e.RowIndex].Cells[COL_BIT];
                 var hexCell = g.Rows[e.RowIndex].Cells[COL_HEX];
@@ -929,7 +896,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
                 if (raw.Length == 0)
                 {
-                    // 비운 경우 나머지도 비우기
                     hexCell.Value = "";
                     decCell.Value = "";
                     return;
@@ -937,14 +903,12 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
                 if (TryParseUShortFromBitString(raw, out ushort v))
                 {
-                    // BIT 표기는 예쁘게 4비트씩 끊어서 다시 정규화
                     bitCell.Value = ToBitString(v);
                     hexCell.Value = $"{v:X4}h";
                     decCell.Value = v.ToString();
                 }
                 else
                 {
-                    // 잘못된 값이면 모두 비움
                     bitCell.Value = "";
                     hexCell.Value = "";
                     decCell.Value = "";
@@ -958,24 +922,13 @@ namespace ModbusTester              // 프로젝트 네임스페이스
         {
             try
             {
-                if (chkRecording.Checked)
-                {
-                    int seconds = ParseRecordSeconds();
-                    if (seconds <= 0) seconds = 60;
-
-                    _recService.Start(seconds);
-                    Log($"[REC] start {seconds}s → {_recService.CurrentFilePath}");
-                }
-                else
-                {
-                    _recService.Stop();
-                    Log("[REC] stop");
-                }
+                UpdateRecordingState();
             }
             catch (Exception ex)
             {
-                MessageBox.Show("Recording 실패: " + ex.Message);
+                MessageBox.Show("Recording 설정 실패: " + ex.Message);
                 chkRecording.Checked = false;
+                UpdateRecordingState();   // 에러났으니 상태 다시 정리
             }
         }
 
@@ -991,30 +944,102 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
             return 60;
         }
-
-        // QuickView
-        private void ToggleQuickWatch()
+        private void StartRecordingInternal()
         {
-            if (_quick == null || _quick.IsDisposed)
+            int seconds = ParseRecordSeconds();
+            if (seconds <= 0) seconds = 60;
+
+            _recService.Start(seconds);
+            Log($"[REC] start {seconds}s → {_recService.CurrentFilePath}");
+        }
+
+        // FormMain 안 어딘가에 추가
+        private void UpdateRecordingState()
+        {
+            // 1) 녹화를 해야 하는 조건: 체크박스 ON + 폴링 ON
+            if (chkRecording.Checked && pollTimer.Enabled)
             {
-                _quick = new FormQuickView();
-                _quick.Show(this);
+                if (!_recService.IsRecording)
+                {
+                    StartRecordingInternal();
+                }
             }
+            // 2) 그 외에는 녹화 중이면 꺼야 함
             else
             {
-                _quick.Close();
+                if (_recService.IsRecording)
+                {
+                    _recService.Stop();
+                    Log("[REC] stop");
+                }
             }
         }
 
+
+        // ───────────────────────── QuickView ─────────────────────────
+
         private void btnQuickView_Click(object sender, EventArgs e)
         {
-            if (!_sp.IsOpen)
+            var targets = GetRxQuickViewTargets();
+            if (targets.Count == 0)
             {
-                MessageBox.Show("먼저 포트를 Open 하세요.");
+                MessageBox.Show("QuickView에 표시할 레지스터를 QV 컬럼에서 선택하세요.");
                 return;
             }
 
-            QuickViewPolling.Run(this, _sp);
+            if (_quick == null || _quick.IsDisposed)
+            {
+                // 새로 생성해서 타깃 설정 후 표시
+                _quick = new FormQuickView(targets);
+                _quick.UpdateTargets(targets);
+                _quick.Show(this);
+
+                var wa = Screen.FromControl(this).WorkingArea;
+                int x = Math.Min(this.Right, wa.Right - _quick.Width);
+                int y = Math.Max(wa.Top, Math.Min(this.Top, wa.Bottom - _quick.Height));
+                _quick.Location = new Point(x, y);
+            }
+            else
+            {
+                // 이미 열려 있으면 타깃만 교체
+                _quick.UpdateTargets(targets);
+                _quick.Focus();
+            }
+        }
+
+        // RX Grid에서 QuickView 체크된 항목들 가져오기
+        // label: Name이 있으면 Name, 없으면 주소(XXXXh)
+        private List<(ushort addr, string label)> GetRxQuickViewTargets()
+        {
+            var list = new List<(ushort addr, string label)>();
+
+            // QV 체크박스 컬럼 인덱스 (이름이 colRxQuickView 라고 가정)
+            int selColIndex = gridRx.Columns["colRxQuickView"]?.Index ?? -1;
+            if (selColIndex < 0) return list;
+
+            foreach (DataGridViewRow r in gridRx.Rows)
+            {
+                if (r.IsNewRow) continue;
+
+                // 체크 여부
+                bool isChecked = r.Cells[selColIndex].Value is bool b && b;
+                if (!isChecked) continue;
+
+                // Register: "0001h" → addr
+                string regText = Convert.ToString(r.Cells[COL_REG].Value) ?? "";
+                if (!TryParseUShortFromHex(regText, out ushort addr))
+                    continue;
+
+                // 닉네임 있으면 그걸, 없으면 주소
+                string name = Convert.ToString(r.Cells[COL_NAME].Value) ?? "";
+                string label = !string.IsNullOrWhiteSpace(name)
+                               ? name.Trim()
+                               : $"{addr:X4}h";
+
+                list.Add((addr, label));
+            }
+
+            return list;
         }
 
         // ───────────────────────── Preset 기능 ─────────────────────────
@@ -1025,7 +1050,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
             foreach (var p in FunctionPresetManager.Items)
             {
-                // Preset 객체 넣기
                 cmbPreset.Items.Add(p);
             }
 
@@ -1159,7 +1183,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
 
         private void btnPresetSave_Click(object sender, EventArgs e)
         {
-            // 현재 선택된 Preset이 있으면 그 이름을 기본값으로 사용
             string defaultName = (cmbPreset.SelectedItem as FunctionPreset)?.Name ?? "";
 
             string name = PromptForPresetName(defaultName);
@@ -1173,7 +1196,6 @@ namespace ModbusTester              // 프로젝트 네임스페이스
             FunctionPresetManager.AddOrUpdate(preset);
             RefreshPresetCombo();
 
-            // ★ 새로 저장된 프리셋을 콤보박스에서 찾아서 선택
             foreach (var item in cmbPreset.Items)
             {
                 if (item is FunctionPreset fp && fp.Name == preset.Name)
@@ -1212,6 +1234,51 @@ namespace ModbusTester              // 프로젝트 네임스페이스
                 return;
 
             ApplyPresetToUi(preset);
+        }
+
+        // ───────────────────────── TX 스냅샷 ─────────────────────────
+
+        private void SaveTxSnapshot()
+        {
+            var list = new List<TxRowSnapshot>();
+
+            foreach (DataGridViewRow r in gridTx.Rows)
+            {
+                if (r.IsNewRow) continue;
+
+                list.Add(new TxRowSnapshot
+                {
+                    Reg = Convert.ToString(r.Cells[COL_REG].Value) ?? "",
+                    Name = Convert.ToString(r.Cells[COL_NAME].Value) ?? "",
+                    Hex = Convert.ToString(r.Cells[COL_HEX].Value) ?? "",
+                    Dec = Convert.ToString(r.Cells[COL_DEC].Value) ?? "",
+                    Bit = Convert.ToString(r.Cells[COL_BIT].Value) ?? "",
+                });
+            }
+
+            _lastTxSnapshot = list;
+        }
+
+        private void RestoreTxSnapshot()
+        {
+            if (_lastTxSnapshot == null) return;
+            if (gridTx.Rows.Count == 0) return;
+
+            int idx = 0;
+
+            foreach (DataGridViewRow r in gridTx.Rows)
+            {
+                if (r.IsNewRow) continue;
+                if (idx >= _lastTxSnapshot.Count) break;
+
+                var snap = _lastTxSnapshot[idx++];
+
+                r.Cells[COL_REG].Value = snap.Reg;
+                r.Cells[COL_NAME].Value = snap.Name;
+                r.Cells[COL_HEX].Value = snap.Hex;
+                r.Cells[COL_DEC].Value = snap.Dec;
+                r.Cells[COL_BIT].Value = snap.Bit;
+            }
         }
     }
 }

@@ -1,7 +1,10 @@
-﻿using System;
+﻿using ModbusTester.Utils;
+using System;
 using System.Drawing;
 using System.Linq;
 using System.Windows.Forms;
+
+using ModbusTester.Utils;
 
 namespace ModbusTester
 {
@@ -31,24 +34,17 @@ namespace ModbusTester
 
         public void UpdateFromRaw(ushort raw)
         {
-            // DEC
             lblDecValue.Text = raw.ToString();
-
-            // HEX (4자리 + h)
-            lblHexValue.Text = $"{raw:X4}h";
-
-            // BIT (16비트: 0000 0000 0000 0000)
-            string bits = Convert.ToString(raw, 2).PadLeft(16, '0');
-            bits = string.Join(" ", Enumerable.Range(0, 4)
-                                              .Select(i => bits.Substring(i * 4, 4)));
-            lblBitValue.Text = bits;
+            lblHexValue.Text = raw.ToHex4();
+            lblBitValue.Text = raw.ToBitString16();
         }
 
         public void ClearValues()
         {
+            ushort zero = 0;
             lblDecValue.Text = "0";
-            lblHexValue.Text = "0000h";
-            lblBitValue.Text = "0000 0000 0000 0000";
+            lblHexValue.Text = zero.ToHex4();
+            lblBitValue.Text = zero.ToBitString16();
         }
     }
 }

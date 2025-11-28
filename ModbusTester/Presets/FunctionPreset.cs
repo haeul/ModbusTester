@@ -1,6 +1,6 @@
 ﻿using System;
 
-namespace ModbusTester
+namespace ModbusTester.Presets
 {
     // 프리셋 1개에 대한 정보
     public class FunctionPreset

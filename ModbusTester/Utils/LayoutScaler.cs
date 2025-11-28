@@ -3,7 +3,7 @@ using System.Collections.Generic;
 using System.Drawing;
 using System.Windows.Forms;
 
-namespace ModbusTester
+namespace ModbusTester.Utils
 {
     /// <summary>
     /// 폼의 초기 컨트롤 배치를 기준으로, 폼 크기에 따라

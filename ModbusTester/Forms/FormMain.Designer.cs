@@ -80,7 +80,7 @@ namespace ModbusTester
             btnPresetDelete = new Button();
             btnPresetSave = new Button();
             btnTxClear = new Button();
-            btnRestore = new Button();
+            btnRevert = new Button();
             grpTx = new GroupBox();
             grpRx.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)gridRx).BeginInit();
@@ -363,7 +363,7 @@ namespace ModbusTester
             numInterval.Name = "numInterval";
             numInterval.Size = new Size(122, 25);
             numInterval.TabIndex = 4;
-            numInterval.Value = new decimal(new int[] { 200, 0, 0, 0 });
+            numInterval.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
             // label19
             // 
@@ -383,6 +383,7 @@ namespace ModbusTester
             cmbRecordEvery.Name = "cmbRecordEvery";
             cmbRecordEvery.Size = new Size(122, 25);
             cmbRecordEvery.TabIndex = 2;
+            cmbRecordEvery.SelectedIndex = 0;
             // 
             // chkRecording
             // 
@@ -530,6 +531,8 @@ namespace ModbusTester
             cmbFunctionCode.Name = "cmbFunctionCode";
             cmbFunctionCode.Size = new Size(108, 25);
             cmbFunctionCode.TabIndex = 101;
+            cmbFunctionCode.SelectedIndexChanged += cmbFunctionCode_SelectedIndexChanged;
+            cmbFunctionCode.TextChanged += cmbFunctionCode_TextChanged;
             // 
             // lblTxStartRegister
             // 
@@ -558,6 +561,7 @@ namespace ModbusTester
             numCount.Size = new Size(108, 25);
             numCount.TabIndex = 104;
             numCount.Value = new decimal(new int[] { 1, 0, 0, 0 });
+            numCount.ValueChanged += numCount_ValueChanged;
             // 
             // numStartRegister
             // 
@@ -673,21 +677,21 @@ namespace ModbusTester
             btnTxClear.UseVisualStyleBackColor = true;
             btnTxClear.Click += btnTxClear_Click;
             // 
-            // btnRestore
+            // btnRevert
             // 
-            btnRestore.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnRestore.Location = new Point(117, 307);
-            btnRestore.Name = "btnRestore";
-            btnRestore.Size = new Size(100, 32);
-            btnRestore.TabIndex = 118;
-            btnRestore.Text = "Restore";
-            btnRestore.UseVisualStyleBackColor = true;
-            btnRestore.Click += btnRestore_Click;
+            btnRevert.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            btnRevert.Location = new Point(117, 307);
+            btnRevert.Name = "btnRevert";
+            btnRevert.Size = new Size(100, 32);
+            btnRevert.TabIndex = 118;
+            btnRevert.Text = "Revert";
+            btnRevert.UseVisualStyleBackColor = true;
+            btnRevert.Click += btnRevert_Click;
             // 
             // grpTx
             // 
             grpTx.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
-            grpTx.Controls.Add(btnRestore);
+            grpTx.Controls.Add(btnRevert);
             grpTx.Controls.Add(btnTxClear);
             grpTx.Controls.Add(btnPresetSave);
             grpTx.Controls.Add(btnPresetDelete);
@@ -776,7 +780,7 @@ namespace ModbusTester
         private Label lblRxDataCount;
         private Button btnQuickView;
         private GroupBox grpTx;
-        private Button btnRestore;
+        private Button btnRevert;
         private Button btnTxClear;
         private Button btnPresetSave;
         private Button btnPresetDelete;

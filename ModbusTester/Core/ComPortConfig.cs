@@ -1,7 +1,7 @@
 ﻿// ComPortConfig.cs
 using System.IO.Ports;
 
-namespace ModbusTester
+namespace ModbusTester.Core
 {
     public class ComPortConfig
     {

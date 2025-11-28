@@ -1,1 +1,0 @@
-﻿[2025-11-26 13:48:37.992] [REC] start 60s → C:\Users\haeul\source\repos\ModbusTester\Data\modbus_rec_20251126_134837.txt

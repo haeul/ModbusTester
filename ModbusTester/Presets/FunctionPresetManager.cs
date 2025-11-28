@@ -3,7 +3,7 @@ using System.IO;
 using System.Text.Json;
 using System.Windows.Forms;
 
-namespace ModbusTester
+namespace ModbusTester.Presets
 {
     public static class FunctionPresetManager
     {

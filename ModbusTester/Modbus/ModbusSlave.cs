@@ -3,7 +3,7 @@ using System.IO.Ports;
 using System.Linq;
 using System.Threading;
 
-namespace ModbusTester
+namespace ModbusTester.Modbus
 {
     /// <summary>
     /// 간단한 RTU 슬레이브 에뮬레이터 (포트를 직접 열어 응답)
@@ -13,7 +13,7 @@ namespace ModbusTester
     public sealed class ModbusSlave : IDisposable
     {
         private readonly SerialPort _sp = new SerialPort();
-        private Thread _loop;
+        private Thread? _loop;
         private volatile bool _run;
 
         public byte SlaveId { get; private set; } = 1;
@@ -120,8 +120,8 @@ namespace ModbusTester
                 int frameLen = 8;
                 if (!CheckCrc(buf, frameLen)) return 1;
 
-                ushort p1 = (ushort)((buf[2] << 8) | buf[3]);
-                ushort p2 = (ushort)((buf[4] << 8) | buf[5]);
+                ushort p1 = (ushort)(buf[2] << 8 | buf[3]);
+                ushort p2 = (ushort)(buf[4] << 8 | buf[5]);
 
                 if (fc == 0x03 || fc == 0x04)
                 {
@@ -129,7 +129,7 @@ namespace ModbusTester
                     ushort count = p2;
                     if (count == 0 || start + count > 65536) return frameLen;
 
-                    ushort[] src = (fc == 0x03) ? _hr : _ir;
+                    ushort[] src = fc == 0x03 ? _hr : _ir;
 
                     int byteCount = count * 2;
                     byte[] resp = new byte[3 + byteCount];
@@ -144,7 +144,8 @@ namespace ModbusTester
                         resp[4 + i * 2] = (byte)(v & 0xFF);
                     }
 
-                    var withCrc = WithCrc(resp);
+                    // 공통 CRC 유틸 사용
+                    var withCrc = ModbusRtu.WithCrc(resp);
                     _sp.Write(withCrc, 0, withCrc.Length);
                 }
                 else // 0x06
@@ -155,7 +156,7 @@ namespace ModbusTester
                         _hr[regAddr] = value;
 
                     byte[] echo = buf.Take(frameLen - 2).ToArray(); // CRC 제외
-                    var withCrc = WithCrc(echo);
+                    var withCrc = ModbusRtu.WithCrc(echo);           // 공통 유틸
                     _sp.Write(withCrc, 0, withCrc.Length);
                 }
 
@@ -165,8 +166,8 @@ namespace ModbusTester
             {
                 if (len < 9) return 0;
 
-                ushort start = (ushort)((buf[2] << 8) | buf[3]);
-                ushort count = (ushort)((buf[4] << 8) | buf[5]);
+                ushort start = (ushort)(buf[2] << 8 | buf[3]);
+                ushort count = (ushort)(buf[4] << 8 | buf[5]);
                 byte byteCount = buf[6];
 
                 int frameLen = 7 + byteCount + 2;
@@ -179,7 +180,7 @@ namespace ModbusTester
                 for (int i = 0; i < count; i++)
                 {
                     int idx = 7 + i * 2;
-                    ushort v = (ushort)((buf[idx] << 8) | buf[idx + 1]);
+                    ushort v = (ushort)(buf[idx] << 8 | buf[idx + 1]);
                     _hr[start + i] = v;
                 }
 
@@ -191,7 +192,7 @@ namespace ModbusTester
                 resp[4] = (byte)(count >> 8);
                 resp[5] = (byte)(count & 0xFF);
 
-                var withCrc2 = WithCrc(resp);
+                var withCrc2 = ModbusRtu.WithCrc(resp);   // 공통 유틸
                 _sp.Write(withCrc2, 0, withCrc2.Length);
 
                 return frameLen;
@@ -202,7 +203,7 @@ namespace ModbusTester
                 if (len < 8) return 1;
 
                 byte[] ex = new byte[] { addr, (byte)(fc | 0x80), 0x01 };
-                var withCrc = WithCrc(ex);
+                var withCrc = ModbusRtu.WithCrc(ex);      // 공통 유틸
                 _sp.Write(withCrc, 0, withCrc.Length);
                 return 8;
             }
@@ -211,36 +212,13 @@ namespace ModbusTester
         // ───────────────────────── Helpers ─────────────────────────
         private static bool CheckCrc(byte[] frame, int len)
         {
-            if (len < 3) return false;
-            ushort calc = Crc16(frame, len - 2);
-            ushort got = (ushort)(frame[len - 2] | (frame[len - 1] << 8));
+            if (frame == null || len < 3) return false;
+
+            // ModbusRtu의 CRC 구현 재사용
+            ushort calc = ModbusRtu.Crc16(frame, len - 2);
+            ushort got = (ushort)(frame[len - 2] | frame[len - 1] << 8);
+
             return calc == got;
-        }
-
-        private static byte[] WithCrc(byte[] frame)
-        {
-            ushort crc = Crc16(frame, frame.Length);
-            byte[] arr = new byte[frame.Length + 2];
-            Buffer.BlockCopy(frame, 0, arr, 0, frame.Length);
-            arr[^2] = (byte)(crc & 0xFF);         // Lo
-            arr[^1] = (byte)((crc >> 8) & 0xFF);  // Hi
-            return arr;
-        }
-
-        private static ushort Crc16(byte[] data, int len)
-        {
-            ushort crc = 0xFFFF;
-            for (int i = 0; i < len; i++)
-            {
-                crc ^= data[i];
-                for (int b = 0; b < 8; b++)
-                {
-                    bool lsb = (crc & 1) != 0;
-                    crc >>= 1;
-                    if (lsb) crc ^= 0xA001;
-                }
-            }
-            return crc;
         }
     }
 }

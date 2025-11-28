@@ -18,7 +18,7 @@ namespace ModbusTester
         private Font? _valueFont;
 
         // UserControl 행 목록
-        private readonly List<ChannelRowControl> _rows = new();
+        private readonly List<ChannelRowControl> _rows = new List<ChannelRowControl>();
 
         public FormQuickView(List<(ushort addr, string label)> targets)
         {

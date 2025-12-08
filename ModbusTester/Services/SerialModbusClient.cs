@@ -44,7 +44,7 @@ namespace ModbusTester.Services
             }
             catch (TimeoutException)
             {
-                // 타임아웃은 조용히 무시 (기존 코드와 동일 전략)
+                // 타임아웃은 조용히 무시
             }
 
             // 남은 데이터 추가로 읽기

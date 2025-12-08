@@ -164,6 +164,9 @@ namespace ModbusTester.Core
                 var row = g.Rows[e.RowIndex];
                 if (row.IsNewRow) return;
 
+                // 닉네임 동기화 디버깅 코드 (삭제 가능)
+                System.Diagnostics.Debug.WriteLine($"CellEndEdit: grid={g.Name}, col={e.ColumnIndex}, _colName={_colName}");
+
                 string reg = Convert.ToString(row.Cells[_colReg].Value) ?? "";
                 string name = Convert.ToString(row.Cells[_colName].Value) ?? "";
 

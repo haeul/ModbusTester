@@ -1,4 +1,5 @@
-﻿using System;
+﻿using ModbusTester.Controls;
+using System;
 using System.Drawing;
 using System.Windows.Forms;
 
@@ -44,10 +45,11 @@ namespace ModbusTester
             colRxBit = new DataGridViewTextBoxColumn();
             colRxQuickView = new DataGridViewCheckBoxColumn();
             grpOpt = new GroupBox();
+            lblRecordingInterval = new Label();
             btnPollStop = new Button();
             btnPollStart = new Button();
             numInterval = new NumericUpDown();
-            label19 = new Label();
+            lblPollingInterval = new Label();
             cmbRecordEvery = new ComboBox();
             chkRecording = new CheckBox();
             grpLog = new GroupBox();
@@ -68,20 +70,20 @@ namespace ModbusTester
             lblTxStartRegister = new Label();
             lblTxRegisterCount = new Label();
             numCount = new NumericUpDown();
-            numStartRegister = new NumericUpDown();
+            numStartRegister = new HexNumericUpDown();
             lblTxDataCount = new Label();
             lblTxCrc = new Label();
             btnCalcCrc = new Button();
             btnSend = new Button();
             txtDataCount = new TextBox();
             txtCrc = new TextBox();
-            lblPreset = new Label();
             cmbPreset = new ComboBox();
             btnPresetDelete = new Button();
             btnPresetSave = new Button();
             btnTxClear = new Button();
             btnRevert = new Button();
             grpTx = new GroupBox();
+            groupBox1 = new GroupBox();
             grpRx.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)gridRx).BeginInit();
             grpOpt.SuspendLayout();
@@ -92,6 +94,7 @@ namespace ModbusTester
             ((System.ComponentModel.ISupportInitialize)numCount).BeginInit();
             ((System.ComponentModel.ISupportInitialize)numStartRegister).BeginInit();
             grpTx.SuspendLayout();
+            groupBox1.SuspendLayout();
             SuspendLayout();
             // 
             // grpRx
@@ -172,7 +175,7 @@ namespace ModbusTester
             // 
             lblRxCrc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblRxCrc.AutoSize = true;
-            lblRxCrc.Location = new Point(71, 177);
+            lblRxCrc.Location = new Point(70, 177);
             lblRxCrc.Name = "lblRxCrc";
             lblRxCrc.Size = new Size(35, 19);
             lblRxCrc.TabIndex = 44;
@@ -182,11 +185,11 @@ namespace ModbusTester
             // 
             lblRxDataCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblRxDataCount.AutoSize = true;
-            lblRxDataCount.Location = new Point(30, 147);
+            lblRxDataCount.Location = new Point(25, 147);
             lblRxDataCount.Name = "lblRxDataCount";
-            lblRxDataCount.Size = new Size(76, 19);
+            lblRxDataCount.Size = new Size(80, 19);
             lblRxDataCount.TabIndex = 43;
-            lblRxDataCount.Text = "DataCount";
+            lblRxDataCount.Text = "Data Count";
             // 
             // txtRxFc
             // 
@@ -223,7 +226,7 @@ namespace ModbusTester
             // lblRxRegisterCount
             // 
             lblRxRegisterCount.AutoSize = true;
-            lblRxRegisterCount.Location = new Point(6, 121);
+            lblRxRegisterCount.Location = new Point(5, 117);
             lblRxRegisterCount.Name = "lblRxRegisterCount";
             lblRxRegisterCount.Size = new Size(100, 19);
             lblRxRegisterCount.TabIndex = 28;
@@ -232,7 +235,7 @@ namespace ModbusTester
             // lblRxStartRegister
             // 
             lblRxStartRegister.AutoSize = true;
-            lblRxStartRegister.Location = new Point(15, 91);
+            lblRxStartRegister.Location = new Point(14, 87);
             lblRxStartRegister.Name = "lblRxStartRegister";
             lblRxStartRegister.Size = new Size(91, 19);
             lblRxStartRegister.TabIndex = 27;
@@ -241,7 +244,7 @@ namespace ModbusTester
             // lblRxFunctionCode
             // 
             lblRxFunctionCode.AutoSize = true;
-            lblRxFunctionCode.Location = new Point(8, 61);
+            lblRxFunctionCode.Location = new Point(7, 57);
             lblRxFunctionCode.Name = "lblRxFunctionCode";
             lblRxFunctionCode.Size = new Size(98, 19);
             lblRxFunctionCode.TabIndex = 25;
@@ -250,7 +253,7 @@ namespace ModbusTester
             // lblRxSlaveAddress
             // 
             lblRxSlaveAddress.AutoSize = true;
-            lblRxSlaveAddress.Location = new Point(13, 31);
+            lblRxSlaveAddress.Location = new Point(12, 27);
             lblRxSlaveAddress.Name = "lblRxSlaveAddress";
             lblRxSlaveAddress.Size = new Size(93, 19);
             lblRxSlaveAddress.TabIndex = 23;
@@ -319,25 +322,35 @@ namespace ModbusTester
             // grpOpt
             // 
             grpOpt.Anchor = AnchorStyles.Top | AnchorStyles.Right;
+            grpOpt.Controls.Add(lblRecordingInterval);
             grpOpt.Controls.Add(btnPollStop);
             grpOpt.Controls.Add(btnPollStart);
             grpOpt.Controls.Add(numInterval);
-            grpOpt.Controls.Add(label19);
+            grpOpt.Controls.Add(lblPollingInterval);
             grpOpt.Controls.Add(cmbRecordEvery);
             grpOpt.Controls.Add(chkRecording);
             grpOpt.Location = new Point(1113, 438);
             grpOpt.Name = "grpOpt";
-            grpOpt.Size = new Size(260, 222);
+            grpOpt.Size = new Size(260, 200);
             grpOpt.TabIndex = 3;
             grpOpt.TabStop = false;
             grpOpt.Text = "Recording / Polling";
             // 
+            // lblRecordingInterval
+            // 
+            lblRecordingInterval.AutoSize = true;
+            lblRecordingInterval.Location = new Point(15, 68);
+            lblRecordingInterval.Name = "lblRecordingInterval";
+            lblRecordingInterval.Size = new Size(101, 19);
+            lblRecordingInterval.TabIndex = 7;
+            lblRecordingInterval.Text = "Record Interval";
+            // 
             // btnPollStop
             // 
             btnPollStop.Anchor = AnchorStyles.Bottom | AnchorStyles.Right;
-            btnPollStop.Location = new Point(138, 110);
+            btnPollStop.Location = new Point(135, 140);
             btnPollStop.Name = "btnPollStop";
-            btnPollStop.Size = new Size(100, 32);
+            btnPollStop.Size = new Size(110, 32);
             btnPollStop.TabIndex = 6;
             btnPollStop.Text = "Stop";
             btnPollStop.UseVisualStyleBackColor = true;
@@ -346,9 +359,9 @@ namespace ModbusTester
             // btnPollStart
             // 
             btnPollStart.Anchor = AnchorStyles.Bottom | AnchorStyles.Left;
-            btnPollStart.Location = new Point(20, 110);
+            btnPollStart.Location = new Point(15, 140);
             btnPollStart.Name = "btnPollStart";
-            btnPollStart.Size = new Size(100, 32);
+            btnPollStart.Size = new Size(110, 32);
             btnPollStart.TabIndex = 5;
             btnPollStart.Text = "Start";
             btnPollStart.UseVisualStyleBackColor = true;
@@ -357,7 +370,7 @@ namespace ModbusTester
             // numInterval
             // 
             numInterval.Increment = new decimal(new int[] { 50, 0, 0, 0 });
-            numInterval.Location = new Point(116, 77);
+            numInterval.Location = new Point(123, 100);
             numInterval.Maximum = new decimal(new int[] { 60000, 0, 0, 0 });
             numInterval.Minimum = new decimal(new int[] { 10, 0, 0, 0 });
             numInterval.Name = "numInterval";
@@ -365,21 +378,21 @@ namespace ModbusTester
             numInterval.TabIndex = 4;
             numInterval.Value = new decimal(new int[] { 100, 0, 0, 0 });
             // 
-            // label19
+            // lblPollingInterval
             // 
-            label19.AutoSize = true;
-            label19.Location = new Point(49, 77);
-            label19.Name = "label19";
-            label19.Size = new Size(55, 19);
-            label19.TabIndex = 3;
-            label19.Text = "Interval";
+            lblPollingInterval.AutoSize = true;
+            lblPollingInterval.Location = new Point(15, 103);
+            lblPollingInterval.Name = "lblPollingInterval";
+            lblPollingInterval.Size = new Size(99, 19);
+            lblPollingInterval.TabIndex = 3;
+            lblPollingInterval.Text = "Polling Interval";
             // 
             // cmbRecordEvery
             // 
             cmbRecordEvery.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbRecordEvery.FormattingEnabled = true;
             cmbRecordEvery.Items.AddRange(new object[] { "1 sec", "5 sec", "10 sec", "30 sec", "60 sec" });
-            cmbRecordEvery.Location = new Point(116, 40);
+            cmbRecordEvery.Location = new Point(123, 65);
             cmbRecordEvery.Name = "cmbRecordEvery";
             cmbRecordEvery.Size = new Size(122, 25);
             cmbRecordEvery.TabIndex = 2;
@@ -388,11 +401,11 @@ namespace ModbusTester
             // chkRecording
             // 
             chkRecording.AutoSize = true;
-            chkRecording.Location = new Point(20, 40);
+            chkRecording.Location = new Point(15, 35);
             chkRecording.Name = "chkRecording";
-            chkRecording.Size = new Size(89, 23);
+            chkRecording.Size = new Size(133, 23);
             chkRecording.TabIndex = 1;
-            chkRecording.Text = "Recording";
+            chkRecording.Text = "Enable Recording";
             chkRecording.UseVisualStyleBackColor = true;
             chkRecording.CheckedChanged += chkRecording_CheckedChanged;
             // 
@@ -404,7 +417,7 @@ namespace ModbusTester
             grpLog.Controls.Add(txtLog);
             grpLog.Location = new Point(12, 438);
             grpLog.Name = "grpLog";
-            grpLog.Size = new Size(1092, 222);
+            grpLog.Size = new Size(1092, 200);
             grpLog.TabIndex = 4;
             grpLog.TabStop = false;
             grpLog.Text = "Message (HEX Log)";
@@ -412,7 +425,7 @@ namespace ModbusTester
             // btnSaveLog
             // 
             btnSaveLog.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSaveLog.Location = new Point(1006, 17);
+            btnSaveLog.Location = new Point(1006, 15);
             btnSaveLog.Name = "btnSaveLog";
             btnSaveLog.Size = new Size(80, 32);
             btnSaveLog.TabIndex = 2;
@@ -423,7 +436,7 @@ namespace ModbusTester
             // btnLogClear
             // 
             btnLogClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnLogClear.Location = new Point(920, 17);
+            btnLogClear.Location = new Point(920, 15);
             btnLogClear.Name = "btnLogClear";
             btnLogClear.Size = new Size(80, 32);
             btnLogClear.TabIndex = 1;
@@ -435,10 +448,10 @@ namespace ModbusTester
             // 
             txtLog.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left | AnchorStyles.Right;
             txtLog.Font = new Font("Consolas", 10F);
-            txtLog.Location = new Point(11, 54);
+            txtLog.Location = new Point(6, 53);
             txtLog.Name = "txtLog";
             txtLog.ReadOnly = true;
-            txtLog.Size = new Size(1075, 160);
+            txtLog.Size = new Size(1080, 140);
             txtLog.TabIndex = 0;
             txtLog.Text = "";
             txtLog.WordWrap = false;
@@ -497,7 +510,7 @@ namespace ModbusTester
             // lblTxSlaveAddress
             // 
             lblTxSlaveAddress.AutoSize = true;
-            lblTxSlaveAddress.Location = new Point(12, 27);
+            lblTxSlaveAddress.Location = new Point(14, 27);
             lblTxSlaveAddress.Name = "lblTxSlaveAddress";
             lblTxSlaveAddress.Size = new Size(93, 19);
             lblTxSlaveAddress.TabIndex = 98;
@@ -505,7 +518,7 @@ namespace ModbusTester
             // 
             // numSlave
             // 
-            numSlave.Location = new Point(109, 27);
+            numSlave.Location = new Point(111, 27);
             numSlave.Maximum = new decimal(new int[] { 247, 0, 0, 0 });
             numSlave.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numSlave.Name = "numSlave";
@@ -516,7 +529,7 @@ namespace ModbusTester
             // lblTxFunctionCode
             // 
             lblTxFunctionCode.AutoSize = true;
-            lblTxFunctionCode.Location = new Point(7, 57);
+            lblTxFunctionCode.Location = new Point(9, 57);
             lblTxFunctionCode.Name = "lblTxFunctionCode";
             lblTxFunctionCode.Size = new Size(98, 19);
             lblTxFunctionCode.TabIndex = 100;
@@ -527,7 +540,7 @@ namespace ModbusTester
             cmbFunctionCode.DropDownStyle = ComboBoxStyle.DropDownList;
             cmbFunctionCode.FormattingEnabled = true;
             cmbFunctionCode.Items.AddRange(new object[] { "03h Read HR", "04h Read IR", "06h Write SR", "10h Write MR" });
-            cmbFunctionCode.Location = new Point(109, 57);
+            cmbFunctionCode.Location = new Point(111, 57);
             cmbFunctionCode.Name = "cmbFunctionCode";
             cmbFunctionCode.Size = new Size(108, 25);
             cmbFunctionCode.TabIndex = 101;
@@ -537,7 +550,7 @@ namespace ModbusTester
             // lblTxStartRegister
             // 
             lblTxStartRegister.AutoSize = true;
-            lblTxStartRegister.Location = new Point(14, 87);
+            lblTxStartRegister.Location = new Point(16, 87);
             lblTxStartRegister.Name = "lblTxStartRegister";
             lblTxStartRegister.Size = new Size(91, 19);
             lblTxStartRegister.TabIndex = 102;
@@ -546,7 +559,7 @@ namespace ModbusTester
             // lblTxRegisterCount
             // 
             lblTxRegisterCount.AutoSize = true;
-            lblTxRegisterCount.Location = new Point(5, 117);
+            lblTxRegisterCount.Location = new Point(7, 117);
             lblTxRegisterCount.Name = "lblTxRegisterCount";
             lblTxRegisterCount.Size = new Size(100, 19);
             lblTxRegisterCount.TabIndex = 103;
@@ -554,7 +567,7 @@ namespace ModbusTester
             // 
             // numCount
             // 
-            numCount.Location = new Point(109, 117);
+            numCount.Location = new Point(111, 117);
             numCount.Maximum = new decimal(new int[] { 125, 0, 0, 0 });
             numCount.Minimum = new decimal(new int[] { 1, 0, 0, 0 });
             numCount.Name = "numCount";
@@ -565,7 +578,9 @@ namespace ModbusTester
             // 
             // numStartRegister
             // 
-            numStartRegister.Location = new Point(109, 87);
+            numStartRegister.Hexadecimal = true;
+            numStartRegister.Location = new Point(111, 87);
+            numStartRegister.Maximum = new decimal(new int[] { 65535, 0, 0, 0 });
             numStartRegister.Name = "numStartRegister";
             numStartRegister.Size = new Size(108, 25);
             numStartRegister.TabIndex = 106;
@@ -574,11 +589,11 @@ namespace ModbusTester
             // 
             lblTxDataCount.Anchor = AnchorStyles.Top | AnchorStyles.Right;
             lblTxDataCount.AutoSize = true;
-            lblTxDataCount.Location = new Point(31, 147);
+            lblTxDataCount.Location = new Point(27, 147);
             lblTxDataCount.Name = "lblTxDataCount";
-            lblTxDataCount.Size = new Size(76, 19);
+            lblTxDataCount.Size = new Size(80, 19);
             lblTxDataCount.TabIndex = 107;
-            lblTxDataCount.Text = "DataCount";
+            lblTxDataCount.Text = "Data Count";
             // 
             // lblTxCrc
             // 
@@ -593,7 +608,7 @@ namespace ModbusTester
             // btnCalcCrc
             // 
             btnCalcCrc.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnCalcCrc.Location = new Point(8, 272);
+            btnCalcCrc.Location = new Point(10, 207);
             btnCalcCrc.Name = "btnCalcCrc";
             btnCalcCrc.Size = new Size(100, 32);
             btnCalcCrc.TabIndex = 109;
@@ -604,7 +619,7 @@ namespace ModbusTester
             // btnSend
             // 
             btnSend.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnSend.Location = new Point(117, 272);
+            btnSend.Location = new Point(119, 207);
             btnSend.Name = "btnSend";
             btnSend.Size = new Size(100, 32);
             btnSend.TabIndex = 110;
@@ -614,40 +629,31 @@ namespace ModbusTester
             // 
             // txtDataCount
             // 
-            txtDataCount.Location = new Point(109, 147);
+            txtDataCount.Location = new Point(111, 147);
             txtDataCount.Name = "txtDataCount";
             txtDataCount.Size = new Size(108, 25);
             txtDataCount.TabIndex = 112;
             // 
             // txtCrc
             // 
-            txtCrc.Location = new Point(109, 177);
+            txtCrc.Location = new Point(111, 177);
             txtCrc.Name = "txtCrc";
             txtCrc.Size = new Size(108, 25);
             txtCrc.TabIndex = 111;
             // 
-            // lblPreset
-            // 
-            lblPreset.AutoSize = true;
-            lblPreset.Location = new Point(5, 207);
-            lblPreset.Name = "lblPreset";
-            lblPreset.Size = new Size(47, 19);
-            lblPreset.TabIndex = 114;
-            lblPreset.Text = "Preset";
-            // 
             // cmbPreset
             // 
             cmbPreset.FormattingEnabled = true;
-            cmbPreset.Location = new Point(57, 207);
+            cmbPreset.Location = new Point(5, 30);
             cmbPreset.Name = "cmbPreset";
-            cmbPreset.Size = new Size(160, 25);
+            cmbPreset.Size = new Size(209, 25);
             cmbPreset.TabIndex = 115;
             cmbPreset.SelectedIndexChanged += cmbPreset_SelectedIndexChanged;
             // 
             // btnPresetDelete
             // 
             btnPresetDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetDelete.Location = new Point(117, 237);
+            btnPresetDelete.Location = new Point(114, 60);
             btnPresetDelete.Name = "btnPresetDelete";
             btnPresetDelete.Size = new Size(100, 32);
             btnPresetDelete.TabIndex = 116;
@@ -658,7 +664,7 @@ namespace ModbusTester
             // btnPresetSave
             // 
             btnPresetSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetSave.Location = new Point(8, 237);
+            btnPresetSave.Location = new Point(5, 60);
             btnPresetSave.Name = "btnPresetSave";
             btnPresetSave.Size = new Size(100, 32);
             btnPresetSave.TabIndex = 117;
@@ -669,7 +675,7 @@ namespace ModbusTester
             // btnTxClear
             // 
             btnTxClear.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnTxClear.Location = new Point(8, 307);
+            btnTxClear.Location = new Point(10, 242);
             btnTxClear.Name = "btnTxClear";
             btnTxClear.Size = new Size(100, 32);
             btnTxClear.TabIndex = 113;
@@ -680,7 +686,7 @@ namespace ModbusTester
             // btnRevert
             // 
             btnRevert.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnRevert.Location = new Point(117, 307);
+            btnRevert.Location = new Point(119, 242);
             btnRevert.Name = "btnRevert";
             btnRevert.Size = new Size(100, 32);
             btnRevert.TabIndex = 118;
@@ -691,12 +697,9 @@ namespace ModbusTester
             // grpTx
             // 
             grpTx.Anchor = AnchorStyles.Top | AnchorStyles.Bottom | AnchorStyles.Left;
+            grpTx.Controls.Add(groupBox1);
             grpTx.Controls.Add(btnRevert);
             grpTx.Controls.Add(btnTxClear);
-            grpTx.Controls.Add(btnPresetSave);
-            grpTx.Controls.Add(btnPresetDelete);
-            grpTx.Controls.Add(cmbPreset);
-            grpTx.Controls.Add(lblPreset);
             grpTx.Controls.Add(txtCrc);
             grpTx.Controls.Add(txtDataCount);
             grpTx.Controls.Add(btnSend);
@@ -719,17 +722,29 @@ namespace ModbusTester
             grpTx.TabStop = false;
             grpTx.Text = "Transmit";
             // 
+            // groupBox1
+            // 
+            groupBox1.Controls.Add(btnPresetDelete);
+            groupBox1.Controls.Add(cmbPreset);
+            groupBox1.Controls.Add(btnPresetSave);
+            groupBox1.Location = new Point(5, 288);
+            groupBox1.Name = "groupBox1";
+            groupBox1.Size = new Size(220, 110);
+            groupBox1.TabIndex = 3;
+            groupBox1.TabStop = false;
+            groupBox1.Text = "Preset";
+            // 
             // FormMain
             // 
             AutoScaleDimensions = new SizeF(96F, 96F);
             AutoScaleMode = AutoScaleMode.Dpi;
-            ClientSize = new Size(1385, 672);
+            ClientSize = new Size(1385, 651);
             Controls.Add(grpTx);
             Controls.Add(grpLog);
             Controls.Add(grpOpt);
             Controls.Add(grpRx);
             Font = new Font("Segoe UI", 10F);
-            MinimumSize = new Size(1212, 711);
+            MinimumSize = new Size(1212, 690);
             Name = "FormMain";
             Text = "Modbus Tester";
             Load += FormMain_Load;
@@ -746,6 +761,7 @@ namespace ModbusTester
             ((System.ComponentModel.ISupportInitialize)numStartRegister).EndInit();
             grpTx.ResumeLayout(false);
             grpTx.PerformLayout();
+            groupBox1.ResumeLayout(false);
             ResumeLayout(false);
         }
 
@@ -756,7 +772,7 @@ namespace ModbusTester
         private Button btnPollStop;
         private Button btnPollStart;
         private NumericUpDown numInterval;
-        private Label label19;
+        private Label lblPollingInterval;
         private ComboBox cmbRecordEvery;
         private CheckBox chkRecording;
         private GroupBox grpLog;
@@ -785,14 +801,13 @@ namespace ModbusTester
         private Button btnPresetSave;
         private Button btnPresetDelete;
         private ComboBox cmbPreset;
-        private Label lblPreset;
         private TextBox txtCrc;
         private TextBox txtDataCount;
         private Button btnSend;
         private Button btnCalcCrc;
         private Label lblTxCrc;
         private Label lblTxDataCount;
-        private NumericUpDown numStartRegister;
+        private HexNumericUpDown numStartRegister;
         private NumericUpDown numCount;
         private Label lblTxRegisterCount;
         private Label lblTxStartRegister;
@@ -812,5 +827,7 @@ namespace ModbusTester
         private DataGridViewTextBoxColumn colRxDec;
         private DataGridViewTextBoxColumn colRxBit;
         private DataGridViewCheckBoxColumn colRxQuickView;
+        private GroupBox groupBox1;
+        private Label lblRecordingInterval;
     }
 }

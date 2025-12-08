@@ -25,6 +25,9 @@ namespace ModbusTester
             _targets = targets?.ToList() ?? new List<(ushort addr, string label)>();
 
             InitializeComponent();
+
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+
             LoadDigitalFont();
 
             BuildRows();

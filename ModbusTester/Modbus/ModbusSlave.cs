@@ -23,15 +23,6 @@ namespace ModbusTester.Modbus
 
         public bool IsOpen => _sp.IsOpen;
 
-        public void InitDemoData()
-        {
-            for (int i = 0; i < 256; i++)
-            {
-                _hr[i] = (ushort)(0x1000 + i);
-                _ir[i] = (ushort)(0x2000 + i);
-            }
-        }
-
         public void Open(string portName, int baud, Parity parity, int dataBits, StopBits stopBits, byte slaveId)
         {
             if (_sp.IsOpen) Close();

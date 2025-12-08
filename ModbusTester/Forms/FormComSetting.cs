@@ -12,11 +12,17 @@ namespace ModbusTester
         private SerialPort? _sp;            // Master 모드에서 실제 통신에 사용할 포트 인스턴스(없으면 null로 유지)
         private ModbusSlave? _slave;        // Slave 모드에서 요청을 받아줄 ModbusSlave 인스턴스(없으면 null)
 
+        // 나중에 삭제
+        private bool _offlineOpenRequested; // 더블클릭으로 오프라인 모드 요청 여부 플래그
+
         private readonly LayoutScaler _layoutScaler;  // 모니터 해상도·DPI에 따라 폼 전체를 한번에 스케일링하기 위한 유틸
 
         public FormComSetting()
         {
             InitializeComponent();          // 디자이너에서 배치한 컨트롤들을 실제 폼에 올리는 부분
+
+            // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
             _layoutScaler = new LayoutScaler(this);    // 이 폼 기준으로 스케일링 로직을 적용하기 위해 생성자에서 한 번만 만든다
             _layoutScaler.ApplyInitialScale(1.3f);     // 기본 UI가 너무 작지 않도록 전체를 1.3배 키워서 가독성 확보
@@ -24,6 +30,8 @@ namespace ModbusTester
             this.StartPosition = FormStartPosition.CenterScreen;  // COM 설정 창은 항상 화면 중앙에서 시작하도록 고정
 
             Load += FormComSetting_Load;    // 폼이 실제로 로드될 때 포트 목록/콤보 초기화를 한 번만 실행하도록 이벤트 연결
+
+            chkSlaveMode.Visible = false; // Slave Mode Check Box 숨기기
         }
 
         private void FormComSetting_Load(object sender, EventArgs e)
@@ -54,6 +62,32 @@ namespace ModbusTester
 
             return cfg;
         }
+        // 나중에 삭제
+        private void lblPort_DoubleClick(object sender, EventArgs e)
+        {
+            try
+            {
+                // 혹시 이전에 열려 있던 포트/슬레이브 있으면 정리
+                CloseCurrent();
+
+                // 장비 없이 UI만 보는 오프라인 모드
+                byte slaveId = 1; // 그냥 기본값, UI 작업용이라 상관 없음
+                var main = new FormMain(null, null, false, slaveId);
+
+                main.FormClosed += (_, __) =>
+                {
+                    CloseCurrent();
+                    this.Show();
+                };
+
+                this.Hide();
+                main.Show();
+            }
+            catch (Exception ex)
+            {
+                MessageBox.Show("오프라인 모드 실행 실패: " + ex.Message);
+            }
+        }
 
         private void btnOpen_Click(object sender, EventArgs e)
         {
@@ -71,7 +105,6 @@ namespace ModbusTester
                 {
                     // 2) Slave 모드
                     _slave = new ModbusSlave();
-                    _slave.InitDemoData();
                     _slave.Open(
                         cfg.PortName,
                         cfg.BaudRate,

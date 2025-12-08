@@ -1,4 +1,5 @@
-﻿using ModbusTester.Core;
+﻿using ModbusTester.Controls;
+using ModbusTester.Core;
 using ModbusTester.Modbus;
 using ModbusTester.Presets;
 using ModbusTester.Services;
@@ -47,8 +48,11 @@ namespace ModbusTester
             InitializeComponent();
             StartPosition = FormStartPosition.CenterScreen;
 
+            // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+
             _layoutScaler = new LayoutScaler(this);
-            _layoutScaler.ApplyInitialScale(1.0f);
+            _layoutScaler.ApplyInitialScale(1.058f);
 
             _sp = sp;
             _slave = slave;
@@ -59,15 +63,25 @@ namespace ModbusTester
             _recService = new RecordingService(recDir);
 
             // Master 모드에서만 통신 객체 생성
-            if (!_slaveMode)
-            {
-                if (_sp == null)
-                    throw new ArgumentNullException(nameof(sp), "Master 모드에서는 SerialPort가 필요합니다.");
+            //if (!_slaveMode)
+            //{
+            //    if (_sp == null)
+            //        throw new ArgumentNullException(nameof(sp), "Master 모드에서는 SerialPort가 필요합니다.");
 
+            //    _client = new SerialModbusClient(_sp);
+            //    _master = new ModbusMasterService(_client);
+            //    _poller = new ModbusPoller(_client);
+            //}
+
+            // Master 모드에서만 통신 객체 생성
+            // → 오프라인 UI 용도로 _sp == null 인 경우도 허용
+            if (!_slaveMode && _sp != null)
+            {
                 _client = new SerialModbusClient(_sp);
                 _master = new ModbusMasterService(_client);
                 _poller = new ModbusPoller(_client);
             }
+
 
             // 그리드 컨트롤러
             _gridController = new RegisterGridController(
@@ -133,12 +147,17 @@ namespace ModbusTester
         {
             bool slave = _slaveMode;
 
+            grpTx.Enabled = !slave;   // TX 영역
+            grpRx.Enabled = !slave;   // RX 영역
+            grpOpt.Enabled = !slave;  // Polling / Recording 옵션
+
             btnSend.Enabled = !slave;
             btnCalcCrc.Enabled = !slave;
             btnPollStart.Enabled = !slave;
             btnPollStop.Enabled = !slave;
 
-            gridRx.Enabled = !slave;
+            gridTx.Enabled = !slave;
+            gridRx.Enabled = !slave;   
 
             Log(slave
                 ? "[MODE] Slave 모드 (해당 포트로 들어오는 요청에 응답)"
@@ -209,7 +228,7 @@ namespace ModbusTester
                 byte crcLo = frame[^2];
                 byte crcHi = frame[^1];
 
-                txtCrc.Text = $"{crcLo:X2} {crcHi:X2}";
+                txtCrc.Text = $"{crcHi:X2}{crcLo:X2}h";
                 Log($"[CRC CALC] {frame.ToHex()}");
             }
             catch (Exception ex)
@@ -397,7 +416,11 @@ namespace ModbusTester
 
         private void Log(string line)
         {
+            // 텍스트 추가
             txtLog.AppendText(line + Environment.NewLine);
+
+            // 그 위치로 스크롤
+            txtLog.ScrollToCaret();
         }
 
         private byte GetFunctionCode()
@@ -758,14 +781,14 @@ namespace ModbusTester
         private void UpdateReceiveHeader(byte[] resp, byte slave, byte fc, ushort start, ushort count)
         {
             txtRxSlave.Text = slave.ToString();
-            txtRxFc.Text = $"0x{fc:X2}";
-            txtRxStart.Text = $"0x{start:X4}";
+            txtRxFc.Text = $"{fc:X2}h";
+            txtRxStart.Text = $"{start:X4}h";
             txtRxCount.Text = count.ToString();
 
             if (resp.Length >= 3)
                 txtRxDataCount.Text = (fc == 0x03 || fc == 0x04) ? resp[2].ToString() : "0";
             if (resp.Length >= 4)
-                txtRxCrc.Text = $"{resp[^2]:X2} {resp[^1]:X2}";
+                txtRxCrc.Text = $"{resp[^1]:X2}{resp[^2]:X2}h";
         }
 
         // ───────────────────── 종료 처리 ─────────────────────
@@ -773,7 +796,7 @@ namespace ModbusTester
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             base.OnFormClosed(e);
-
+            
             try
             {
                 _recService.Dispose();

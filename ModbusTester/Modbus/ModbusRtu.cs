@@ -25,7 +25,6 @@ namespace ModbusTester.Modbus
     );
 
     // ───────────────── CRC Helper ─────────────────
-    // (이전 Crc16.cs 내용)
     internal static class ModbusCrc16
     {
         /// <summary>
@@ -46,7 +45,10 @@ namespace ModbusTester.Modbus
                 {
                     bool lsb = (crc & 0x0001) != 0;
                     crc >>= 1;
-                    if (lsb) crc ^= 0xA001;
+                    if (lsb)
+                    {
+                        crc ^= 0xA001;
+                    }
                 }
             }
 
@@ -56,7 +58,7 @@ namespace ModbusTester.Modbus
         /// <summary>
         /// CRC 값을 Modbus 규격에 맞게 (Lo, Hi) 순서로 버퍼에 기록.
         /// </summary>
-        public static void AppendLittleEndian(byte[] buffer, int offset, ushort crc)
+        public static void AppendLittleEndian(byte[] buffer, int offset, ushort crc) // offset : CRC를 쓰기 시작할 위치 인덱스
         {
             if (buffer == null) throw new ArgumentNullException(nameof(buffer));
             if (offset < 0 || offset + 1 >= buffer.Length)
@@ -92,7 +94,7 @@ namespace ModbusTester.Modbus
             var crc = ModbusCrc16.Compute(frameBody, frameBody.Length);
             var arr = new byte[frameBody.Length + 2];
 
-            Buffer.BlockCopy(frameBody, 0, arr, 0, frameBody.Length);
+            Buffer.BlockCopy(frameBody, 0, arr, 0, frameBody.Length); // Buffer.BlockCopy(sourceArray, sourceOffset, destinationArray, destinationOffset, count)
             ModbusCrc16.AppendLittleEndian(arr, frameBody.Length, crc);
 
             return arr;
@@ -105,12 +107,14 @@ namespace ModbusTester.Modbus
         /// </summary>
         public static byte[] BuildReadFrame(byte slave, byte fc, ushort start, ushort count)
         {
-            var raw = new byte[]
-            {
-                slave, fc,
-                (byte)(start >> 8), (byte)(start & 0xFF),
-                (byte)(count >> 8), (byte)(count & 0xFF)
-            };
+            var raw = new byte[6];
+            raw[0] = slave;
+            raw[1] = fc;
+            raw[2] = (byte)(start >> 8);
+            raw[3] = (byte)(start & 0xFF);
+            raw[4] = (byte)(count >> 8);
+            raw[5] = (byte)(count & 0xFF);
+
             return WithCrc(raw);
         }
 
@@ -119,12 +123,14 @@ namespace ModbusTester.Modbus
         /// </summary>
         public static byte[] BuildWriteSingleFrame(byte slave, ushort addr, ushort value)
         {
-            var raw = new byte[]
-            {
-                slave, 0x06,
-                (byte)(addr  >> 8), (byte)(addr  & 0xFF),
-                (byte)(value >> 8), (byte)(value & 0xFF)
-            };
+            var raw = new byte[6];
+            raw[0] = slave;
+            raw[1] = 0x06;
+            raw[2] = (byte)(addr >> 8);
+            raw[3] = (byte)(addr & 0xFF);
+            raw[4] = (byte)(value >> 8);
+            raw[5] = (byte)(value & 0xFF);
+
             return WithCrc(raw);
         }
 

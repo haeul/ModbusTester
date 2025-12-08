@@ -34,13 +34,13 @@
             cmbPort = new ComboBox();
             label13 = new Label();
             grpCom = new GroupBox();
+            btnOpen = new Button();
             cmbStopBits = new ComboBox();
             label17 = new Label();
             cmbDataBits = new ComboBox();
             label16 = new Label();
             cmbParity = new ComboBox();
             label15 = new Label();
-            btnOpen = new Button();
             grpCom.SuspendLayout();
             SuspendLayout();
             // 
@@ -89,6 +89,9 @@
             label13.Size = new Size(29, 15);
             label13.TabIndex = 0;
             label13.Text = "Port";
+            // 예시: FormComSetting.Designer.cs 안 라벨 초기화 부분
+            label13.DoubleClick += lblPort_DoubleClick;
+
             // 
             // grpCom
             // 
@@ -111,6 +114,16 @@
             grpCom.TabIndex = 3;
             grpCom.TabStop = false;
             grpCom.Text = "COM Setting";
+            // 
+            // btnOpen
+            // 
+            btnOpen.Location = new Point(20, 206);
+            btnOpen.Name = "btnOpen";
+            btnOpen.Size = new Size(218, 39);
+            btnOpen.TabIndex = 13;
+            btnOpen.Text = "Open";
+            btnOpen.UseVisualStyleBackColor = true;
+            btnOpen.Click += btnOpen_Click;
             // 
             // cmbStopBits
             // 
@@ -165,16 +178,6 @@
             label15.Size = new Size(37, 15);
             label15.TabIndex = 4;
             label15.Text = "Parity";
-            // 
-            // btnOpen
-            // 
-            btnOpen.Location = new Point(20, 206);
-            btnOpen.Name = "btnOpen";
-            btnOpen.Size = new Size(218, 39);
-            btnOpen.TabIndex = 13;
-            btnOpen.Text = "Open";
-            btnOpen.UseVisualStyleBackColor = true;
-            btnOpen.Click += btnOpen_Click;
             // 
             // FormComSetting
             // 

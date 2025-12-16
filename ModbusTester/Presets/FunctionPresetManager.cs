@@ -57,6 +57,7 @@ namespace ModbusTester.Presets
                 existing.FunctionCode = preset.FunctionCode;
                 existing.StartAddress = preset.StartAddress;
                 existing.RegisterCount = preset.RegisterCount;
+                existing.TxRows = preset.TxRows ?? new List<TxRowPreset>();
             }
             else
             {

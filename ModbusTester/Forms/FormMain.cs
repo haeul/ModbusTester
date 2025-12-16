@@ -13,6 +13,7 @@ using System.IO.Ports;
 using System.Linq;
 using System.Threading.Tasks;
 using System.Windows.Forms;
+using static ModbusTester.Utils.HexExtensions;
 
 namespace ModbusTester
 {
@@ -49,7 +50,7 @@ namespace ModbusTester
             StartPosition = FormStartPosition.CenterScreen;
 
             // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
-            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
             _layoutScaler = new LayoutScaler(this);
             _layoutScaler.ApplyInitialScale(1.058f);
@@ -62,26 +63,13 @@ namespace ModbusTester
             string recDir = Path.Combine(Application.StartupPath, "Data");
             _recService = new RecordingService(recDir);
 
-            // Master 모드에서만 통신 객체 생성
-            //if (!_slaveMode)
-            //{
-            //    if (_sp == null)
-            //        throw new ArgumentNullException(nameof(sp), "Master 모드에서는 SerialPort가 필요합니다.");
-
-            //    _client = new SerialModbusClient(_sp);
-            //    _master = new ModbusMasterService(_client);
-            //    _poller = new ModbusPoller(_client);
-            //}
-
-            // Master 모드에서만 통신 객체 생성
-            // → 오프라인 UI 용도로 _sp == null 인 경우도 허용
+            // Master 모드에서만 통신 객체 생성 (오프라인 UI 용도로 _sp == null 허용)
             if (!_slaveMode && _sp != null)
             {
                 _client = new SerialModbusClient(_sp);
                 _master = new ModbusMasterService(_client);
                 _poller = new ModbusPoller(_client);
             }
-
 
             // 그리드 컨트롤러
             _gridController = new RegisterGridController(
@@ -102,12 +90,16 @@ namespace ModbusTester
         private async void FormMain_Shown(object? sender, EventArgs e)
         {
             await _gridController.InitializeGridsAsync();
+
+            // 그리드 초기화 후 TX Name을 RX로 1회 동기화(초기 상태 안정화)
+            _gridController.SyncAllTxNamesToRx();
         }
 
         private void FormMain_Load(object sender, EventArgs e)
         {
             // Function Code 기본값
             if (cmbFunctionCode.Items.Count == 0)
+            {
                 cmbFunctionCode.Items.AddRange(new object[]
                 {
                     "03h Read HR",
@@ -115,6 +107,7 @@ namespace ModbusTester
                     "06h Write SR",
                     "10h Write MR"
                 });
+            }
 
             if (cmbFunctionCode.SelectedIndex < 0)
                 cmbFunctionCode.SelectedIndex = 0;
@@ -124,11 +117,39 @@ namespace ModbusTester
             numStartRegister.Minimum = 0x0000;
             numStartRegister.Maximum = 0xFFFF;
             numStartRegister.Value = 0x0000;
+
             numCount.Value = 1;
             RefreshDataCount();
 
             // 그리드 공통 설정
             _gridController.SetupGrids();
+
+            // (중복 방지) 이벤트 재결합
+            gridTx.KeyDown -= GridTx_KeyDown;
+            gridTx.KeyDown += GridTx_KeyDown;
+
+            gridTx.EditingControlShowing -= GridTx_EditingControlShowing;
+            gridTx.EditingControlShowing += GridTx_EditingControlShowing;
+
+            gridTx.CellValueChanged -= GridTx_CellValueChanged;
+            gridTx.CellValueChanged += GridTx_CellValueChanged;
+
+            gridTx.CurrentCellDirtyStateChanged -= GridTx_CurrentCellDirtyStateChanged;
+            gridTx.CurrentCellDirtyStateChanged += GridTx_CurrentCellDirtyStateChanged;
+
+            // ※ 아래 두 이벤트는 디자이너에서 이미 연결되어 있을 수 있음
+            //    (중복 호출 방지 위해 -= 후 += 형태로 안정 결합)
+            gridTx.CellBeginEdit -= Grid_CellBeginEdit;
+            gridTx.CellBeginEdit += Grid_CellBeginEdit;
+
+            gridRx.CellBeginEdit -= Grid_CellBeginEdit;
+            gridRx.CellBeginEdit += Grid_CellBeginEdit;
+
+            gridTx.CellEndEdit -= HexAutoFormat_OnEndEdit;
+            gridTx.CellEndEdit += HexAutoFormat_OnEndEdit;
+
+            gridRx.CellEndEdit -= HexAutoFormat_OnEndEdit;
+            gridRx.CellEndEdit += HexAutoFormat_OnEndEdit;
 
             // RX 그리드에서 QV 컬럼을 맨 앞으로
             var qvCol = gridRx.Columns["colRxQuickView"];
@@ -157,7 +178,7 @@ namespace ModbusTester
             btnPollStop.Enabled = !slave;
 
             gridTx.Enabled = !slave;
-            gridRx.Enabled = !slave;   
+            gridRx.Enabled = !slave;
 
             Log(slave
                 ? "[MODE] Slave 모드 (해당 포트로 들어오는 요청에 응답)"
@@ -176,10 +197,97 @@ namespace ModbusTester
             _gridController.HandleCellBeginEdit(sender, e);
         }
 
-        // HEX/DEC/BIT 포맷 및 Name 동기화
+        // HEX/DEC/BIT 포맷 처리
         private void HexAutoFormat_OnEndEdit(object sender, DataGridViewCellEventArgs e)
         {
             _gridController.HandleCellEndEdit(sender, e);
+
+            // Name 편집은 EndEdit에서 처리하지 않음.
+            // Name 동기화는 CellValueChanged( + CommitEdit )로 100% 처리.
+        }
+
+        // ✅ Dirty 상태(특히 편집 중 Delete/Backspace, 체크박스 등)를 “즉시 커밋”해서 CellValueChanged가 항상 뜨게 함
+        private void GridTx_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
+        {
+            if (gridTx.IsCurrentCellDirty)
+                gridTx.CommitEdit(DataGridViewDataErrorContexts.Commit);
+        }
+
+        // ✅ Name 값이 어떤 방식으로든 바뀌면 TX → RX 즉시 동기화
+        private void GridTx_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (e == null) return;
+            if (e.RowIndex < 0) return;
+            if (e.ColumnIndex != COL_NAME) return;
+
+            _gridController.SyncTxNameToRxByRowIndex(e.RowIndex);
+        }
+
+        // ───────────────────── 드래그/삭제 처리 (TX Name) ─────────────────────
+
+        private void GridTx_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
+                return;
+
+            ClearSelectedTxNames();
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+
+        private void GridTx_EditingControlShowing(object sender, DataGridViewEditingControlShowingEventArgs e)
+        {
+            if (e.Control is TextBox tb)
+            {
+                tb.KeyDown -= GridTx_EditingTextBox_KeyDown;
+                tb.KeyDown += GridTx_EditingTextBox_KeyDown;
+            }
+        }
+
+        private void GridTx_EditingTextBox_KeyDown(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
+                return;
+
+            ClearSelectedTxNames();
+
+            e.Handled = true;
+            e.SuppressKeyPress = true;
+        }
+
+        /// <summary>
+        /// ✅ 드래그로 여러 셀 선택 후 Delete/Backspace를 눌러도
+        /// “항상” TX/RX Name이 동기화되도록 강제 처리.
+        /// </summary>
+        private void ClearSelectedTxNames()
+        {
+            if (gridTx.SelectedCells == null || gridTx.SelectedCells.Count == 0)
+                return;
+
+            var rows = new HashSet<int>();
+            foreach (DataGridViewCell cell in gridTx.SelectedCells)
+            {
+                if (cell.OwningRow == null || cell.OwningRow.IsNewRow)
+                    continue;
+                rows.Add(cell.RowIndex);
+            }
+
+            foreach (int r in rows)
+            {
+                if (r < 0 || r >= gridTx.Rows.Count) continue;
+                var row = gridTx.Rows[r];
+                if (row.IsNewRow) continue;
+
+                // 편집 중일 수 있으니 값 변경 → 커밋 → 즉시 동기화까지 보장
+                row.Cells[COL_NAME].Value = "";
+
+                // ✅ 프로그램적으로 바꾼 경우/편집 상태에 따라 CellValueChanged가 애매하게 안 뜨는 케이스 방지
+                _gridController.SyncTxNameToRxByRowIndex(r);
+            }
+
+            if (gridTx.IsCurrentCellInEditMode)
+                gridTx.EndEdit();
         }
 
         // ───────────────────── CRC 계산 버튼 ─────────────────────
@@ -197,20 +305,17 @@ namespace ModbusTester
 
                 if (fc == 0x03 || fc == 0x04)
                 {
-                    // Read 계열: ModbusRtu가 전체 프레임(슬레이브+FC+주소+수량+CRC) 생성
                     frame = ModbusRtu.BuildReadFrame(slave, fc, start, count);
                     txtDataCount.Text = "0";
                 }
                 else if (fc == 0x06)
                 {
-                    // Write Single: 첫 번째 TX 값 사용
                     ushort val = _gridController.ReadTxValueOrZero(0);
                     frame = ModbusRtu.BuildWriteSingleFrame(slave, start, val);
                     txtDataCount.Text = "2";
                 }
                 else if (fc == 0x10)
                 {
-                    // Write Multiple: TX 그리드 값들 사용
                     ushort[] vals = _gridController.ReadTxValues(count);
                     frame = ModbusRtu.BuildWriteMultipleFrame(slave, start, vals);
                     byte byteCount = (byte)(vals.Length * 2);
@@ -314,10 +419,17 @@ namespace ModbusTester
         private void btnRevert_Click(object sender, EventArgs e)
         {
             _gridController.RevertTxSnapshot();
+
+            // Revert는 TX Name도 바뀔 수 있으니 1회 전체 동기화
+            _gridController.SyncAllTxNamesToRx();
         }
 
         private void btnTxClear_Click(object sender, EventArgs e)
         {
+            // 닉네임 제외 값 영역이 다 비어있으면 Clear 막기 (스냅샷도 갱신 안 함)
+            if (_gridController.IsTxValueAreaEmpty())
+                return;
+
             _gridController.SaveTxSnapshot();
             _gridController.ClearTxValues();
         }
@@ -416,12 +528,31 @@ namespace ModbusTester
 
         private void Log(string line)
         {
-            // 텍스트 추가
+            LogDirection dir = LogDirection.None;
+
+            if (line.StartsWith("TX:", StringComparison.OrdinalIgnoreCase))
+                dir = LogDirection.Tx;
+            else if (line.StartsWith("RX:", StringComparison.OrdinalIgnoreCase))
+                dir = LogDirection.Rx;
+
+            Color color = dir switch
+            {
+                LogDirection.Tx => Color.DarkBlue,
+                LogDirection.Rx => Color.DarkGreen,
+                _ => txtLog.ForeColor
+            };
+
+            txtLog.SelectionStart = txtLog.TextLength;
+            txtLog.SelectionLength = 0;
+            txtLog.SelectionColor = color;
+
             txtLog.AppendText(line + Environment.NewLine);
 
-            // 그 위치로 스크롤
+            txtLog.SelectionColor = txtLog.ForeColor;
             txtLog.ScrollToCaret();
         }
+
+        private enum LogDirection { None, Tx, Rx }
 
         private byte GetFunctionCode()
         {
@@ -436,6 +567,7 @@ namespace ModbusTester
                 return fcHex;
             if (byte.TryParse(raw, out var fcDec))
                 return fcDec;
+
             return 0x03;
         }
 
@@ -443,6 +575,7 @@ namespace ModbusTester
         {
             byte fc = GetFunctionCode();
             ushort count = (ushort)numCount.Value;
+
             if (fc == 0x10)
                 txtDataCount.Text = (count * 2).ToString();
             else if (fc == 0x06)
@@ -480,11 +613,11 @@ namespace ModbusTester
 
         private void StartRecordingInternal()
         {
-            int seconds = ParseRecordSeconds();   // RecordEvery 설정 (ex: 1, 5, 10, 30, 60)
+            int seconds = ParseRecordSeconds();
             if (seconds <= 0) seconds = 60;
 
             byte slave = (byte)numSlave.Value;
-            byte fc = GetFunctionCode();                 // 0x03, 0x04 등
+            byte fc = GetFunctionCode();
             ushort start = (ushort)numStartRegister.Value;
             ushort count = (ushort)numCount.Value;
 
@@ -494,13 +627,10 @@ namespace ModbusTester
 
         private void UpdateRecordingState()
         {
-            // 폴링 + 체크박스 ON 일 때만 녹화
             if (chkRecording.Checked && pollTimer.Enabled)
             {
                 if (!_recService.IsRecording)
-                {
                     StartRecordingInternal();
-                }
             }
             else
             {
@@ -530,8 +660,8 @@ namespace ModbusTester
                 _quick.Show(this);
 
                 var wa = Screen.FromControl(this).WorkingArea;
-                int x = Math.Min(this.Right, wa.Right - _quick.Width);
-                int y = Math.Max(wa.Top, Math.Min(this.Top, wa.Bottom - _quick.Height));
+                int x = Math.Min(Right, wa.Right - _quick.Width);
+                int y = Math.Max(wa.Top, Math.Min(Top, wa.Bottom - _quick.Height));
                 _quick.Location = new Point(x, y);
             }
             else
@@ -556,7 +686,7 @@ namespace ModbusTester
                 if (!isChecked) continue;
 
                 string regText = Convert.ToString(r.Cells[COL_REG].Value) ?? "";
-                if (!TryParseUShortFromHex(regText, out ushort addr))
+                if (!TryParseUShortFromRegText(regText, out ushort addr))
                     continue;
 
                 string name = Convert.ToString(r.Cells[COL_NAME].Value) ?? "";
@@ -570,28 +700,112 @@ namespace ModbusTester
             return list;
         }
 
-        private static bool TryParseUShortFromHex(string s, out ushort value)
+        private static bool TryParseUShortFromRegText(string s, out ushort value)
         {
             value = 0;
             if (string.IsNullOrWhiteSpace(s)) return false;
+
             s = s.Trim();
             if (s.StartsWith("0x", StringComparison.OrdinalIgnoreCase))
                 s = s[2..];
             if (s.EndsWith("h", StringComparison.OrdinalIgnoreCase))
                 s = s[..^1];
+
             return ushort.TryParse(s, NumberStyles.HexNumber, null, out value);
         }
 
         // ───────────────────── Preset ─────────────────────
+
+        private void ApplyPresetTxRows(FunctionPreset preset)
+        {
+            if (preset.TxRows == null || preset.TxRows.Count == 0)
+                return;
+
+            var map = preset.TxRows.ToDictionary(x => x.Address);
+
+            ushort start = preset.StartAddress;
+            int count = preset.RegisterCount;
+
+            for (int i = 0; i < count && i < gridTx.Rows.Count; i++)
+            {
+                ushort addr = (ushort)(start + i);
+                if (!map.TryGetValue(addr, out var saved))
+                    continue;
+
+                var row = gridTx.Rows[i];
+                if (row.IsNewRow) continue;
+
+                // Name
+                row.Cells[COL_NAME].Value = saved.Name ?? "";
+
+                // Value가 있으면 DEC/HEX/BIT를 재계산해서 채움
+                if (saved.Value.HasValue)
+                {
+                    ushort v = saved.Value.Value;
+                    row.Cells[COL_DEC].Value = v.ToString();
+                    row.Cells[COL_HEX].Value = v.ToString("X4") + "h";
+                    row.Cells[COL_BIT].Value = Convert.ToString(v, 2).PadLeft(16, '0');
+                }
+            }
+
+            // 프리셋 적용은 대량 변경이므로 마지막에 1회 전체 동기화가 가장 깔끔/확실
+            _gridController.SyncAllTxNamesToRx();
+        }
+
+        private ushort? TryReadUShortFromCells(DataGridViewRow row)
+        {
+            string decText = Convert.ToString(row.Cells[COL_DEC].Value) ?? "";
+            if (ushort.TryParse(decText.Trim(), out ushort dec))
+                return dec;
+
+            string hexText = Convert.ToString(row.Cells[COL_HEX].Value) ?? "";
+            hexText = hexText.Trim()
+                             .Replace("0x", "", StringComparison.OrdinalIgnoreCase)
+                             .Replace("h", "", StringComparison.OrdinalIgnoreCase);
+
+            if (ushort.TryParse(hexText, NumberStyles.HexNumber, CultureInfo.InvariantCulture, out ushort hex))
+                return hex;
+
+            return null;
+        }
+
+        private List<TxRowPreset> CaptureTxRows(ushort start, int count)
+        {
+            var list = new List<TxRowPreset>();
+
+            for (int i = 0; i < count && i < gridTx.Rows.Count; i++)
+            {
+                var row = gridTx.Rows[i];
+                if (row.IsNewRow) continue;
+
+                string name = Convert.ToString(row.Cells[COL_NAME].Value) ?? "";
+                name = name.Trim();
+
+                ushort? value = TryReadUShortFromCells(row);
+
+                bool hasName = !string.IsNullOrWhiteSpace(name);
+                bool hasValue = value.HasValue;
+
+                if (!hasName && !hasValue)
+                    continue; // 완전 빈 행은 저장 안 함
+
+                list.Add(new TxRowPreset
+                {
+                    Address = (ushort)(start + i),
+                    Name = name,
+                    Value = value
+                });
+            }
+
+            return list;
+        }
 
         private void RefreshPresetCombo()
         {
             cmbPreset.Items.Clear();
 
             foreach (var p in FunctionPresetManager.Items)
-            {
                 cmbPreset.Items.Add(p);
-            }
 
             cmbPreset.SelectedIndex = -1;
         }
@@ -621,7 +835,8 @@ namespace ModbusTester
                     SlaveId = slaveId,
                     FunctionCode = fc,
                     StartAddress = startAddr,
-                    RegisterCount = regCount
+                    RegisterCount = regCount,
+                    TxRows = CaptureTxRows(startAddr, regCount)
                 };
             }
             catch
@@ -675,6 +890,9 @@ namespace ModbusTester
             {
                 numCount.Value = numCount.Minimum;
             }
+
+            _gridController.ClearTxAll();     // (이 안에서 TX->RX Name 1회 동기화도 수행)
+            ApplyPresetTxRows(preset);        // 프리셋 복원 (마지막에 다시 1회 전체 동기화)
         }
 
         private string PromptForPresetName(string? defaultName = null)
@@ -717,6 +935,7 @@ namespace ModbusTester
                 var result = dlg.ShowDialog(this);
                 if (result == DialogResult.OK)
                     return txt.Text.Trim();
+
                 return "";
             }
         }
@@ -796,18 +1015,9 @@ namespace ModbusTester
         protected override void OnFormClosed(FormClosedEventArgs e)
         {
             base.OnFormClosed(e);
-            
-            try
-            {
-                _recService.Dispose();
-            }
-            catch { }
 
-            try
-            {
-                _slave?.Dispose();
-            }
-            catch { }
+            try { _recService.Dispose(); } catch { }
+            try { _slave?.Dispose(); } catch { }
 
             try
             {

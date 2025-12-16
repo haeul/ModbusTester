@@ -17,6 +17,7 @@ namespace ModbusTester.Core
     /// - TX 스냅샷(실행취소용)
     /// - TX/RX 값 클리어, Copy 기능
     /// - TX 값 읽기(ReadTxValues / ReadTxValueOrZero)
+    /// - TX Name → RX Name 동기화 (이벤트 기반 + 전체 강제 동기화)
     /// </summary>
     public class RegisterGridController
     {
@@ -152,39 +153,12 @@ namespace ModbusTester.Core
             }
         }
 
-        // HEX/DEC/BIT, Name, Register 자동 증가 처리
+        // HEX/DEC/BIT, Register 자동 증가 처리
+        // ※ Name 동기화는 여기서 하지 않음 (이벤트 기반으로 FormMain에서 처리)
         public void HandleCellEndEdit(object sender, DataGridViewCellEventArgs e)
         {
             var g = (DataGridView)sender;
             if (e.RowIndex < 0) return;
-
-            // TX Name 수정 시 RX Name 동기화
-            if (e.ColumnIndex == _colName && ReferenceEquals(g, _gridTx))
-            {
-                var row = g.Rows[e.RowIndex];
-                if (row.IsNewRow) return;
-
-                // 닉네임 동기화 디버깅 코드 (삭제 가능)
-                System.Diagnostics.Debug.WriteLine($"CellEndEdit: grid={g.Name}, col={e.ColumnIndex}, _colName={_colName}");
-
-                string reg = Convert.ToString(row.Cells[_colReg].Value) ?? "";
-                string name = Convert.ToString(row.Cells[_colName].Value) ?? "";
-
-                if (string.IsNullOrEmpty(reg))
-                    return;
-
-                foreach (DataGridViewRow rxRow in _gridRx.Rows)
-                {
-                    if (rxRow.IsNewRow) continue;
-                    if (Convert.ToString(rxRow.Cells[_colReg].Value) == reg)
-                    {
-                        rxRow.Cells[_colName].Value = name;
-                        break;
-                    }
-                }
-
-                return;
-            }
 
             // 첫 줄 Register 수정 시 전체 Register 재배열
             if (e.ColumnIndex == _colReg && e.RowIndex == 0)
@@ -330,6 +304,28 @@ namespace ModbusTester.Core
             }
         }
 
+        // TX 영역 비었는지 확인용 (Name 제외)
+        public bool IsTxValueAreaEmpty()
+        {
+            foreach (DataGridViewRow row in _gridTx.Rows)
+            {
+                if (row.IsNewRow) continue;
+
+                string hex = Convert.ToString(row.Cells[_colHex].Value) ?? "";
+                string dec = Convert.ToString(row.Cells[_colDec].Value) ?? "";
+                string bit = Convert.ToString(row.Cells[_colBit].Value) ?? "";
+
+                if (!string.IsNullOrWhiteSpace(hex) ||
+                    !string.IsNullOrWhiteSpace(dec) ||
+                    !string.IsNullOrWhiteSpace(bit))
+                {
+                    return false;
+                }
+            }
+
+            return true;
+        }
+
         // TX 스냅샷 저장/복원
         public void SaveTxSnapshot()
         {
@@ -374,6 +370,23 @@ namespace ModbusTester.Core
             }
         }
 
+        // TX 전체 초기화 (Register 제외)
+        public void ClearTxAll()
+        {
+            foreach (DataGridViewRow row in _gridTx.Rows)
+            {
+                if (row.IsNewRow) continue;
+
+                row.Cells[_colName].Value = "";
+                row.Cells[_colHex].Value = "";
+                row.Cells[_colDec].Value = "";
+                row.Cells[_colBit].Value = "";
+            }
+
+            // ✅ “어떤 상황에서도 동기화” 원칙이면, TX를 비웠으면 RX Name도 따라가야 함
+            SyncAllTxNamesToRx();
+        }
+
         // TX 값만 전체 초기화 (Register/Name 유지)
         public void ClearTxValues()
         {
@@ -398,7 +411,7 @@ namespace ModbusTester.Core
             }
         }
 
-        // RX → TX 값 복사
+        // RX → TX 값 복사 (값만)
         public void CopyRxToTx()
         {
             foreach (DataGridViewRow rx in _gridRx.Rows)
@@ -435,6 +448,7 @@ namespace ModbusTester.Core
         public ushort ReadTxValueOrZero(int rowIndex)
         {
             if (rowIndex >= _gridTx.Rows.Count) return 0;
+
             string hex = Convert.ToString(_gridTx.Rows[rowIndex].Cells[_colHex].Value) ?? "";
             string dec = Convert.ToString(_gridTx.Rows[rowIndex].Cells[_colDec].Value) ?? "";
 
@@ -442,7 +456,48 @@ namespace ModbusTester.Core
                 return v1;
             if (!string.IsNullOrWhiteSpace(dec) && ushort.TryParse(dec.Trim(), out ushort v2))
                 return v2;
+
             return 0;
+        }
+
+        // ─────────────────────────
+        // ✅ TX Name → RX Name 동기화
+        // ─────────────────────────
+
+        public void SyncTxNameToRxByRowIndex(int rowIndex)
+        {
+            if (rowIndex < 0 || rowIndex >= _gridTx.Rows.Count)
+                return;
+
+            var txRow = _gridTx.Rows[rowIndex];
+            if (txRow.IsNewRow) return;
+
+            string reg = Convert.ToString(txRow.Cells[_colReg].Value) ?? "";
+            string name = Convert.ToString(txRow.Cells[_colName].Value) ?? "";
+
+            if (string.IsNullOrWhiteSpace(reg))
+                return;
+
+            foreach (DataGridViewRow rxRow in _gridRx.Rows)
+            {
+                if (rxRow.IsNewRow) continue;
+                if (Convert.ToString(rxRow.Cells[_colReg].Value) == reg)
+                {
+                    rxRow.Cells[_colName].Value = name;
+                    break;
+                }
+            }
+        }
+
+        public void SyncAllTxNamesToRx()
+        {
+            for (int i = 0; i < _gridTx.Rows.Count; i++)
+            {
+                var row = _gridTx.Rows[i];
+                if (row.IsNewRow) continue;
+
+                SyncTxNameToRxByRowIndex(i);
+            }
         }
 
         // ───────── 내부 Helper (그리드 전용) ─────────

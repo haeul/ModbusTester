@@ -90,7 +90,7 @@ namespace ModbusTester
                 lstMacros.SelectedIndex = 0;
         }
 
-        // ✅ 외부에서 Preset 목록이 바뀐 경우 갱신할 수 있도록 공개
+        // 외부에서 Preset 목록이 바뀐 경우 갱신할 수 있도록 공개
         public void RefreshPresetCombo()
         {
             InitPresetComboSource();

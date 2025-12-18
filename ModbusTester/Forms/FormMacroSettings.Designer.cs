@@ -28,7 +28,7 @@ namespace ModbusTester
         private System.Windows.Forms.GroupBox grpSteps;
         private System.Windows.Forms.DataGridView dgvSteps;
         private System.Windows.Forms.DataGridViewTextBoxColumn colStep;
-        private System.Windows.Forms.DataGridViewComboBoxColumn colPreset; // ✅ ComboBox로 변경
+        private System.Windows.Forms.DataGridViewComboBoxColumn colPreset; // ComboBox로 변경
         private System.Windows.Forms.DataGridViewTextBoxColumn colDelayMs;
 
         private System.Windows.Forms.Panel pnlStepButtons;

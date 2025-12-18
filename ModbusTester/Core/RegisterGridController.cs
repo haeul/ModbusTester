@@ -383,7 +383,7 @@ namespace ModbusTester.Core
                 row.Cells[_colBit].Value = "";
             }
 
-            // ✅ “어떤 상황에서도 동기화” 원칙이면, TX를 비웠으면 RX Name도 따라가야 함
+            // “어떤 상황에서도 동기화” 원칙이면, TX를 비웠으면 RX Name도 따라가야 함
             SyncAllTxNamesToRx();
         }
 
@@ -461,7 +461,7 @@ namespace ModbusTester.Core
         }
 
         // ─────────────────────────
-        // ✅ TX Name → RX Name 동기화
+        // TX Name → RX Name 동기화
         // ─────────────────────────
 
         public void SyncTxNameToRxByRowIndex(int rowIndex)

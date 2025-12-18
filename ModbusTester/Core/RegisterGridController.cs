@@ -501,6 +501,51 @@ namespace ModbusTester.Core
         }
 
         // ───────── 내부 Helper (그리드 전용) ─────────
+        public void HandleGridDeleteKey(object sender, KeyEventArgs e)
+        {
+            if (e.KeyCode != Keys.Delete) return;
+
+            var g = sender as DataGridView;
+            if (g == null) return;
+
+            // 사용자가 실제로 편집 중이면(텍스트 박스 커서 들어간 상태) 기본 동작 존중
+            if (g.IsCurrentCellInEditMode) return;
+
+            var cell = g.CurrentCell;
+            if (cell == null) return;
+
+            int rowIndex = cell.RowIndex;
+            int colIndex = cell.ColumnIndex;
+            if (rowIndex < 0) return;
+
+            var row = g.Rows[rowIndex];
+            if (row.IsNewRow) return;
+
+            // 1) Name 칸에서 Delete → Name만 지움
+            if (colIndex == _colName)
+            {
+                if (!row.Cells[_colName].ReadOnly)
+                    row.Cells[_colName].Value = "";
+
+                // (TX Name->RX Name 동기화 정책이면) TX에서만 동기화
+                if (ReferenceEquals(g, _gridTx))
+                    SyncTxNameToRxByRowIndex(rowIndex);
+
+                e.Handled = true;
+                return;
+            }
+
+            // 2) HEX/DEC/BIT 칸에서 Delete → 값 3칸만 지움 (Name은 건드리지 않음)
+            if (colIndex == _colHex || colIndex == _colDec || colIndex == _colBit)
+            {
+                if (!row.Cells[_colHex].ReadOnly) row.Cells[_colHex].Value = "";
+                if (!row.Cells[_colDec].ReadOnly) row.Cells[_colDec].Value = "";
+                if (!row.Cells[_colBit].ReadOnly) row.Cells[_colBit].Value = "";
+
+                e.Handled = true;
+                return;
+            }
+        }
 
         private void UpdateBitCell(DataGridViewRow row)
         {

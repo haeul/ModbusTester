@@ -84,6 +84,7 @@ namespace ModbusTester
             btnRevert = new Button();
             grpTx = new GroupBox();
             groupBox1 = new GroupBox();
+            btnMacroSetting = new Button();
             grpRx.SuspendLayout();
             ((System.ComponentModel.ISupportInitialize)gridRx).BeginInit();
             grpOpt.SuspendLayout();
@@ -269,7 +270,7 @@ namespace ModbusTester
             gridRx.RowHeadersVisible = false;
             gridRx.RowHeadersWidth = 62;
             gridRx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            gridRx.Size = new Size(453, 375);
+            gridRx.Size = new Size(453, 385);
             gridRx.TabIndex = 0;
             gridRx.CellBeginEdit += Grid_CellBeginEdit;
             gridRx.CellEndEdit += HexAutoFormat_OnEndEdit;
@@ -396,7 +397,6 @@ namespace ModbusTester
             cmbRecordEvery.Name = "cmbRecordEvery";
             cmbRecordEvery.Size = new Size(122, 25);
             cmbRecordEvery.TabIndex = 2;
-            cmbRecordEvery.SelectedIndex = 0;
             // 
             // chkRecording
             // 
@@ -470,7 +470,7 @@ namespace ModbusTester
             gridTx.RowHeadersVisible = false;
             gridTx.RowHeadersWidth = 62;
             gridTx.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
-            gridTx.Size = new Size(426, 375);
+            gridTx.Size = new Size(426, 385);
             gridTx.TabIndex = 105;
             gridTx.CellBeginEdit += Grid_CellBeginEdit;
             gridTx.CellEndEdit += HexAutoFormat_OnEndEdit;
@@ -644,7 +644,7 @@ namespace ModbusTester
             // cmbPreset
             // 
             cmbPreset.FormattingEnabled = true;
-            cmbPreset.Location = new Point(5, 30);
+            cmbPreset.Location = new Point(5, 25);
             cmbPreset.Name = "cmbPreset";
             cmbPreset.Size = new Size(209, 25);
             cmbPreset.TabIndex = 115;
@@ -653,7 +653,7 @@ namespace ModbusTester
             // btnPresetDelete
             // 
             btnPresetDelete.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetDelete.Location = new Point(114, 60);
+            btnPresetDelete.Location = new Point(114, 55);
             btnPresetDelete.Name = "btnPresetDelete";
             btnPresetDelete.Size = new Size(100, 32);
             btnPresetDelete.TabIndex = 116;
@@ -664,7 +664,7 @@ namespace ModbusTester
             // btnPresetSave
             // 
             btnPresetSave.Anchor = AnchorStyles.Top | AnchorStyles.Right;
-            btnPresetSave.Location = new Point(5, 60);
+            btnPresetSave.Location = new Point(5, 55);
             btnPresetSave.Name = "btnPresetSave";
             btnPresetSave.Size = new Size(100, 32);
             btnPresetSave.TabIndex = 117;
@@ -724,15 +724,26 @@ namespace ModbusTester
             // 
             // groupBox1
             // 
+            groupBox1.Controls.Add(btnMacroSetting);
             groupBox1.Controls.Add(btnPresetDelete);
             groupBox1.Controls.Add(cmbPreset);
             groupBox1.Controls.Add(btnPresetSave);
-            groupBox1.Location = new Point(5, 288);
+            groupBox1.Location = new Point(5, 280);
             groupBox1.Name = "groupBox1";
-            groupBox1.Size = new Size(220, 110);
+            groupBox1.Size = new Size(220, 128);
             groupBox1.TabIndex = 3;
             groupBox1.TabStop = false;
             groupBox1.Text = "Preset";
+            // 
+            // btnMacroSetting
+            // 
+            btnMacroSetting.Location = new Point(5, 91);
+            btnMacroSetting.Name = "btnMacroSetting";
+            btnMacroSetting.Size = new Size(209, 32);
+            btnMacroSetting.TabIndex = 118;
+            btnMacroSetting.Text = "Macro Setting";
+            btnMacroSetting.UseVisualStyleBackColor = true;
+            btnMacroSetting.Click += btnMacroSetting_Click;
             // 
             // FormMain
             // 
@@ -829,5 +840,6 @@ namespace ModbusTester
         private DataGridViewCheckBoxColumn colRxQuickView;
         private GroupBox groupBox1;
         private Label lblRecordingInterval;
+        private Button btnMacroSetting;
     }
 }

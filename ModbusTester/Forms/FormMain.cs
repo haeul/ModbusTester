@@ -42,6 +42,8 @@ namespace ModbusTester
 
         private readonly RecordingService _recService;
 
+        private FormMacroSetting? _macroForm;
+
         private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
 
         public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
@@ -128,6 +130,9 @@ namespace ModbusTester
             gridTx.KeyDown -= GridTx_KeyDown;
             gridTx.KeyDown += GridTx_KeyDown;
 
+            gridTx.KeyDown += Grid_DeleteKeyDown;
+            gridRx.KeyDown += Grid_DeleteKeyDown;
+
             gridTx.EditingControlShowing -= GridTx_EditingControlShowing;
             gridTx.EditingControlShowing += GridTx_EditingControlShowing;
 
@@ -137,8 +142,8 @@ namespace ModbusTester
             gridTx.CurrentCellDirtyStateChanged -= GridTx_CurrentCellDirtyStateChanged;
             gridTx.CurrentCellDirtyStateChanged += GridTx_CurrentCellDirtyStateChanged;
 
-            // ※ 아래 두 이벤트는 디자이너에서 이미 연결되어 있을 수 있음
-            //    (중복 호출 방지 위해 -= 후 += 형태로 안정 결합)
+            // 아래 두 이벤트는 디자이너에서 이미 연결되어 있을 수 있음
+            // (중복 호출 방지 위해 -= 후 += 형태로 안정 결합)
             gridTx.CellBeginEdit -= Grid_CellBeginEdit;
             gridTx.CellBeginEdit += Grid_CellBeginEdit;
 
@@ -191,6 +196,11 @@ namespace ModbusTester
             UpdateUiByMode();
         }
 
+        private void Grid_DeleteKeyDown(object sender, KeyEventArgs e)
+        {
+            _gridController.HandleGridDeleteKey(sender, e);
+        }
+
         // Register 첫 줄만 수정 가능하게
         private void Grid_CellBeginEdit(object sender, DataGridViewCellCancelEventArgs e)
         {
@@ -206,14 +216,14 @@ namespace ModbusTester
             // Name 동기화는 CellValueChanged( + CommitEdit )로 100% 처리.
         }
 
-        // ✅ Dirty 상태(특히 편집 중 Delete/Backspace, 체크박스 등)를 “즉시 커밋”해서 CellValueChanged가 항상 뜨게 함
+        // Dirty 상태(특히 편집 중 Delete/Backspace, 체크박스 등)를 “즉시 커밋”해서 CellValueChanged가 항상 뜨게 함
         private void GridTx_CurrentCellDirtyStateChanged(object? sender, EventArgs e)
         {
             if (gridTx.IsCurrentCellDirty)
                 gridTx.CommitEdit(DataGridViewDataErrorContexts.Commit);
         }
 
-        // ✅ Name 값이 어떤 방식으로든 바뀌면 TX → RX 즉시 동기화
+        // Name 값이 어떤 방식으로든 바뀌면 TX → RX 즉시 동기화
         private void GridTx_CellValueChanged(object? sender, DataGridViewCellEventArgs e)
         {
             if (e == null) return;
@@ -223,14 +233,14 @@ namespace ModbusTester
             _gridController.SyncTxNameToRxByRowIndex(e.RowIndex);
         }
 
-        // ───────────────────── 드래그/삭제 처리 (TX Name) ─────────────────────
+        // ───────────────────── 드래그/삭제 처리 (TX Name/Value) ─────────────────────
 
         private void GridTx_KeyDown(object sender, KeyEventArgs e)
         {
             if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
                 return;
 
-            ClearSelectedTxNames();
+            ClearSelectedTxCells();
 
             e.Handled = true;
             e.SuppressKeyPress = true;
@@ -250,30 +260,52 @@ namespace ModbusTester
             if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
                 return;
 
-            ClearSelectedTxNames();
+            ClearSelectedTxCells();
 
             e.Handled = true;
             e.SuppressKeyPress = true;
         }
 
         /// <summary>
-        /// ✅ 드래그로 여러 셀 선택 후 Delete/Backspace를 눌러도
-        /// “항상” TX/RX Name이 동기화되도록 강제 처리.
+        /// Delete/Backspace 입력 시 선택된 셀에 따라 Name 또는 HEX/DEC/BIT 묶음 정리
+        /// - Name 셀만 선택하면 Name만 지우고 TX→RX 동기화 유지
+        /// - HEX/DEC/BIT 중 하나라도 선택하면 같은 행의 세 값 모두 지움(Name은 유지)
         /// </summary>
-        private void ClearSelectedTxNames()
+        private void ClearSelectedTxCells()
         {
             if (gridTx.SelectedCells == null || gridTx.SelectedCells.Count == 0)
                 return;
 
-            var rows = new HashSet<int>();
+            var nameRows = new HashSet<int>();
+            var valueRows = new HashSet<int>();
+
             foreach (DataGridViewCell cell in gridTx.SelectedCells)
             {
                 if (cell.OwningRow == null || cell.OwningRow.IsNewRow)
                     continue;
-                rows.Add(cell.RowIndex);
+
+                if (cell.ColumnIndex == COL_NAME)
+                {
+                    nameRows.Add(cell.RowIndex);
+                }
+                else if (cell.ColumnIndex == COL_HEX || cell.ColumnIndex == COL_DEC || cell.ColumnIndex == COL_BIT)
+                {
+                    valueRows.Add(cell.RowIndex);
+                }
             }
 
-            foreach (int r in rows)
+            foreach (int r in valueRows)
+            {
+                if (r < 0 || r >= gridTx.Rows.Count) continue;
+                var row = gridTx.Rows[r];
+                if (row.IsNewRow) continue;
+
+                row.Cells[COL_HEX].Value = "";
+                row.Cells[COL_DEC].Value = "";
+                row.Cells[COL_BIT].Value = "";
+            }
+
+            foreach (int r in nameRows)
             {
                 if (r < 0 || r >= gridTx.Rows.Count) continue;
                 var row = gridTx.Rows[r];
@@ -282,14 +314,13 @@ namespace ModbusTester
                 // 편집 중일 수 있으니 값 변경 → 커밋 → 즉시 동기화까지 보장
                 row.Cells[COL_NAME].Value = "";
 
-                // ✅ 프로그램적으로 바꾼 경우/편집 상태에 따라 CellValueChanged가 애매하게 안 뜨는 케이스 방지
+                // 프로그램적으로 바꾼 경우/편집 상태에 따라 CellValueChanged가 애매하게 안 뜨는 케이스 방지
                 _gridController.SyncTxNameToRxByRowIndex(r);
             }
 
             if (gridTx.IsCurrentCellInEditMode)
                 gridTx.EndEdit();
         }
-
         // ───────────────────── CRC 계산 버튼 ─────────────────────
 
         private void btnCalcCrc_Click(object sender, EventArgs e)
@@ -940,6 +971,105 @@ namespace ModbusTester
             }
         }
 
+        // FormMain.cs 안 (FormMain 클래스 내부)
+        public bool TryRunPresetByName(string presetName, out string error)
+        {
+            error = "";
+
+            if (string.IsNullOrWhiteSpace(presetName))
+            {
+                error = "Preset 이름이 비어 있습니다.";
+                return false;
+            }
+
+            if (_slaveMode)
+            {
+                error = "Slave 모드에서는 실행할 수 없습니다.";
+                return false;
+            }
+
+            if (!_isOpen)
+            {
+                error = "포트가 OPEN 상태가 아닙니다.";
+                return false;
+            }
+
+            if (_master == null)
+            {
+                error = "통신 클라이언트(_master)가 초기화되지 않았습니다.";
+                return false;
+            }
+
+            // 1) Preset 찾기
+            var preset = FunctionPresetManager.Items
+                .FirstOrDefault(p => string.Equals(p.Name, presetName, StringComparison.OrdinalIgnoreCase));
+
+            if (preset == null)
+            {
+                error = $"Preset을 찾을 수 없습니다: {presetName}";
+                return false;
+            }
+
+            try
+            {
+                // 2) UI에 적용 (Slave/FC/Start/Count)
+                ApplyPresetToUi(preset);
+
+                // 3) 현재 UI 설정 기준으로 Send 수행 (btnSend_Click 로직과 동일)
+                byte slave = (byte)numSlave.Value;
+                ushort start = (ushort)numStartRegister.Value;
+                ushort count = (ushort)numCount.Value;
+                byte fc = GetFunctionCode();
+
+                if (fc == 0x03 || fc == 0x04)
+                {
+                    var result = _master.ReadRegisters(slave, (FunctionCode)fc, start, count);
+
+                    Log("TX: " + result.Request.ToHex());
+                    Log("RX: " + result.Response.ToHex());
+
+                    UpdateReceiveHeader(result.Response, slave, fc, start, count);
+                    _gridController.FillRxGrid(start, result.Values);
+                    RegisterCache.UpdateRange(start, result.Values);
+                }
+                else if (fc == 0x06)
+                {
+                    ushort val = _gridController.ReadTxValueOrZero(0);
+                    var result = _master.WriteSingleRegister(slave, start, val);
+
+                    Log("TX: " + result.Request.ToHex());
+                    Log("RX: " + result.Response.ToHex());
+
+                    UpdateReceiveHeader(result.Response, slave, fc, start, 1);
+                    RegisterCache.UpdateRange(start, new ushort[] { val });
+                }
+                else if (fc == 0x10)
+                {
+                    ushort[] vals = _gridController.ReadTxValues(count);
+                    var result = _master.WriteMultipleRegisters(slave, start, vals);
+
+                    Log("TX: " + result.Request.ToHex());
+                    Log("RX: " + result.Response.ToHex());
+
+                    UpdateReceiveHeader(result.Response, slave, fc, start, (ushort)vals.Length);
+                    RegisterCache.UpdateRange(start, vals);
+                }
+                else
+                {
+                    error = $"지원하지 않는 Function Code: 0x{fc:X2}";
+                    return false;
+                }
+
+                return true;
+            }
+            catch (Exception ex)
+            {
+                error = ex.Message;
+                return false;
+            }
+        }
+
+
         private void btnPresetSave_Click(object sender, EventArgs e)
         {
             string defaultName = (cmbPreset.SelectedItem as FunctionPreset)?.Name ?? "";
@@ -993,6 +1123,41 @@ namespace ModbusTester
                 return;
 
             ApplyPresetToUi(preset);
+        }
+
+        // FormMacroSetting.cs 띄우기
+        private void btnMacroSetting_Click(object sender, EventArgs e)
+        {
+            // 이미 열려 있으면 앞으로 가져오기
+            if (_macroForm != null && !_macroForm.IsDisposed)
+            {
+                if (_macroForm.WindowState == FormWindowState.Minimized)
+                    _macroForm.WindowState = FormWindowState.Normal;
+
+                _macroForm.BringToFront();
+                _macroForm.Activate();
+                return;
+            }
+
+            // 새로 생성
+            _macroForm = new FormMacroSetting(this);
+            _macroForm.StartPosition = FormStartPosition.Manual;
+
+            // 메인 폼 왼쪽에 딱 붙여서 배치
+            int formW = _macroForm.Width > 0 ? _macroForm.Width : _macroForm.MinimumSize.Width;
+
+            int x = this.Left - formW;
+            int y = this.Top;
+
+            if (y < 0) y = 0;
+
+            _macroForm.Location = new Point(x, y);
+
+            // 닫히면 참조 해제
+            _macroForm.FormClosed += (_, __) => _macroForm = null;
+
+            // 모델리스로 표시
+            _macroForm.Show(this);
         }
 
         // ───────────────────── RX 헤더 업데이트 ─────────────────────

@@ -44,6 +44,8 @@ namespace ModbusTester
 
         private FormMacroSetting? _macroForm;
 
+        private FormGridZoom? _rxZoom;
+
         private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
 
         public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
@@ -156,6 +158,8 @@ namespace ModbusTester
             gridRx.CellEndEdit -= HexAutoFormat_OnEndEdit;
             gridRx.CellEndEdit += HexAutoFormat_OnEndEdit;
 
+            gridRx.CellDoubleClick += Grid_CellDoubleClick_OpenZoom;
+
             // RX 그리드에서 QV 컬럼을 맨 앞으로
             var qvCol = gridRx.Columns["colRxQuickView"];
             if (qvCol != null)
@@ -167,6 +171,24 @@ namespace ModbusTester
             // 프리셋 로드
             FunctionPresetManager.Load();
             RefreshPresetCombo();
+        }
+
+        private void Grid_CellDoubleClick_OpenZoom(object? sender, DataGridViewCellEventArgs e)
+        {
+            if (sender is not DataGridView g) return;
+
+            // RX 확대창이 이미 있으면 재사용
+            if (_rxZoom != null && !_rxZoom.IsDisposed)
+            {
+                _rxZoom.BringToFront();
+                _rxZoom.Activate();
+                return;
+            }
+
+            // 새로 생성
+            _rxZoom = new FormGridZoom(gridRx, this, placeOnRight: true, hideQvColumn: false);
+            _rxZoom.FormClosed += (_, __) => _rxZoom = null;
+            _rxZoom.Show(this);
         }
 
         private void UpdateUiByMode()
@@ -970,8 +992,6 @@ namespace ModbusTester
                 return "";
             }
         }
-
-        // FormMain.cs 안 (FormMain 클래스 내부)
         public bool TryRunPresetByName(string presetName, out string error)
         {
             error = "";

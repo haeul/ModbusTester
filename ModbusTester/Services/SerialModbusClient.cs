@@ -11,6 +11,7 @@ namespace ModbusTester.Services
     public class SerialModbusClient
     {
         private readonly SerialPort _sp;
+        private readonly object _ioLock = new object();
 
         public SerialModbusClient(SerialPort sp)
         {
@@ -29,41 +30,44 @@ namespace ModbusTester.Services
             if (!_sp.IsOpen)
                 throw new InvalidOperationException("SerialPort가 열려 있지 않습니다.");
 
-            _sp.DiscardInBuffer();
-            _sp.Write(request, 0, request.Length);
-
-            // 간단한 딜레이 후 1차 읽기
-            System.Threading.Thread.Sleep(30);
-
-            var buf = new byte[512];
-            int read = 0;
-
-            try
+            lock (_ioLock)
             {
-                read += _sp.Read(buf, 0, buf.Length);
-            }
-            catch (TimeoutException)
-            {
-                // 타임아웃은 조용히 무시
-            }
+                _sp.DiscardInBuffer();
+                _sp.Write(request, 0, request.Length);
 
-            // 남은 데이터 추가로 읽기
-            System.Threading.Thread.Sleep(30);
-            try
-            {
-                if (_sp.BytesToRead > 0)
+                // 간단한 딜레이 후 1차 읽기
+                System.Threading.Thread.Sleep(30);
+
+                var buf = new byte[512];
+                int read = 0;
+
+                try
                 {
-                    int remain = Math.Min(buf.Length - read, _sp.BytesToRead);
-                    read += _sp.Read(buf, read, remain);
+                    read += _sp.Read(buf, 0, buf.Length);
                 }
-            }
-            catch (TimeoutException)
-            {
-            }
+                catch (TimeoutException)
+                {
+                    // 타임아웃은 조용히 무시
+                }
 
-            var resp = new byte[read];
-            Buffer.BlockCopy(buf, 0, resp, 0, read);
-            return resp;
+                // 남은 데이터 추가로 읽기
+                System.Threading.Thread.Sleep(30);
+                try
+                {
+                    if (_sp.BytesToRead > 0)
+                    {
+                        int remain = Math.Min(buf.Length - read, _sp.BytesToRead);
+                        read += _sp.Read(buf, read, remain);
+                    }
+                }
+                catch (TimeoutException)
+                {
+                }
+
+                var resp = new byte[read];
+                Buffer.BlockCopy(buf, 0, resp, 0, read);
+                return resp;
+            }
         }
     }
 }

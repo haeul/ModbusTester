@@ -46,6 +46,8 @@ namespace ModbusTester
 
         private FormGridZoom? _rxZoom;
 
+        private PollingConfig? _pollingConfig;
+
         private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
 
         public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
@@ -215,6 +217,8 @@ namespace ModbusTester
         private void chkSlaveMode_CheckedChanged(object sender, EventArgs e)
         {
             pollTimer.Stop();
+            _pollingConfig = null;
+            UpdateRecordingState();
             UpdateUiByMode();
         }
 
@@ -534,6 +538,21 @@ namespace ModbusTester
                 return;
             }
 
+            byte fc = GetFunctionCode();
+            if (!(fc == 0x03 || fc == 0x04))
+            {
+                MessageBox.Show("폴링은 Function Code 03/04(Read)만 지원합니다.");
+                return;
+            }
+
+            _pollingConfig = new PollingConfig
+            {
+                Slave = (byte)numSlave.Value,
+                Start = (ushort)numStartRegister.Value,
+                Count = (ushort)numCount.Value,
+                FunctionCode = fc
+            };
+
             pollTimer.Interval = (int)numInterval.Value;
             pollTimer.Start();
 
@@ -553,11 +572,13 @@ namespace ModbusTester
                 if (!_isOpen) return;
                 if (_poller == null) return;
 
-                byte slave = (byte)numSlave.Value;
-                ushort start = (ushort)numStartRegister.Value;
-                ushort count = (ushort)numCount.Value;
-                byte fc = GetFunctionCode();
-                if (!(fc == 0x03 || fc == 0x04)) return;
+                if (_pollingConfig == null) return;
+
+                var cfg = _pollingConfig.Value;
+                byte slave = cfg.Slave;
+                ushort start = cfg.Start;
+                ushort count = cfg.Count;
+                byte fc = cfg.FunctionCode;
 
                 var result = _poller.Poll(slave, fc, start, count);
 
@@ -673,6 +694,15 @@ namespace ModbusTester
             byte fc = GetFunctionCode();
             ushort start = (ushort)numStartRegister.Value;
             ushort count = (ushort)numCount.Value;
+
+            if (_pollingConfig != null && pollTimer.Enabled)
+            {
+                var cfg = _pollingConfig.Value;
+                slave = cfg.Slave;
+                fc = cfg.FunctionCode;
+                start = cfg.Start;
+                count = cfg.Count;
+            }
 
             _recService.Start(slave, fc, start, count, seconds);
             Log($"[REC] start every {seconds}s → {_recService.CurrentFilePath}");
@@ -1032,14 +1062,19 @@ namespace ModbusTester
 
             try
             {
-                // 2) UI에 적용 (Slave/FC/Start/Count)
-                ApplyPresetToUi(preset);
+                byte slave = preset.SlaveId;
+                ushort start = preset.StartAddress;
+                ushort count = preset.RegisterCount;
+                byte fc = preset.FunctionCode;
 
-                // 3) 현재 UI 설정 기준으로 Send 수행 (btnSend_Click 로직과 동일)
-                byte slave = (byte)numSlave.Value;
-                ushort start = (ushort)numStartRegister.Value;
-                ushort count = (ushort)numCount.Value;
-                byte fc = GetFunctionCode();
+                if (!(fc == 0x03 || fc == 0x04 || fc == 0x06 || fc == 0x10))
+                {
+                    error = $"지원하지 않는 Function Code: 0x{fc:X2}";
+                    return false;
+                }
+
+                if (count == 0)
+                    count = (ushort)Math.Max(1, preset.TxRows?.Count ?? 1);
 
                 if (fc == 0x03 || fc == 0x04)
                 {
@@ -1054,7 +1089,7 @@ namespace ModbusTester
                 }
                 else if (fc == 0x06)
                 {
-                    ushort val = _gridController.ReadTxValueOrZero(0);
+                    ushort val = ReadPresetValue(preset, start);
                     var result = _master.WriteSingleRegister(slave, start, val);
 
                     Log("TX: " + result.Request.ToHex());
@@ -1065,7 +1100,7 @@ namespace ModbusTester
                 }
                 else if (fc == 0x10)
                 {
-                    ushort[] vals = _gridController.ReadTxValues(count);
+                    ushort[] vals = ReadPresetValues(preset, count);
                     var result = _master.WriteMultipleRegisters(slave, start, vals);
 
                     Log("TX: " + result.Request.ToHex());
@@ -1089,6 +1124,35 @@ namespace ModbusTester
             }
         }
 
+        private ushort ReadPresetValue(FunctionPreset preset, ushort address)
+        {
+            var found = preset.TxRows?.FirstOrDefault(r => r.Address == address);
+            if (found != null && found.Value.HasValue)
+                return found.Value.Value;
+
+            return 0;
+        }
+
+        private ushort[] ReadPresetValues(FunctionPreset preset, ushort count)
+        {
+            ushort start = preset.StartAddress;
+            var arr = new ushort[count];
+
+            if (preset.TxRows != null && preset.TxRows.Count > 0)
+            {
+                var map = preset.TxRows.ToDictionary(r => r.Address, r => r.Value);
+                for (int i = 0; i < count; i++)
+                {
+                    ushort addr = (ushort)(start + i);
+                    if (map.TryGetValue(addr, out var value) && value.HasValue)
+                        arr[i] = value.Value;
+                    else
+                        arr[i] = 0;
+                }
+            }
+
+            return arr;
+        }
 
         private void btnPresetSave_Click(object sender, EventArgs e)
         {
@@ -1196,6 +1260,14 @@ namespace ModbusTester
         }
 
         // ───────────────────── 종료 처리 ─────────────────────
+
+        private struct PollingConfig
+        {
+            public byte Slave;
+            public byte FunctionCode;
+            public ushort Start;
+            public ushort Count;
+        }
 
         protected override void OnFormClosed(FormClosedEventArgs e)
         {

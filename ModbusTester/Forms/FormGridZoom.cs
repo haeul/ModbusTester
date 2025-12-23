@@ -175,6 +175,14 @@ namespace ModbusTester
                 _srcToDstColMap[col.Index] = dstIndex;
                 dstIndex++;
             }
+            // QV를 맨 앞으로
+            var qvCol = gridZoom.Columns["colRxQuickView"];
+            if (qvCol != null)
+                qvCol.DisplayIndex = 0;
+
+            // 정렬 화살표 제거
+            foreach (DataGridViewColumn c in gridZoom.Columns)
+                c.SortMode = DataGridViewColumnSortMode.NotSortable;
         }
 
         private void SyncAllRows()

@@ -11,9 +11,19 @@ namespace ModbusTester
         private readonly bool _hideQvColumn;
         private readonly System.Windows.Forms.Timer _syncTimer = new System.Windows.Forms.Timer();
 
-        // 원본 컬럼 인덱스 -> 확대창 컬럼 인덱스 매핑
-        // (QV를 빼면 인덱스가 어긋나기 때문에 필요)
         private int[] _srcToDstColMap = Array.Empty<int>();
+
+        // ====== 폰트 기반 스케일 기준값 ======
+        private float _baseFontSize;
+        private int _baseHeaderHeight;
+        private int _baseRowHeight;
+        private Size _baseClientSize;
+        private bool _baseCaptured;
+
+        // ====== UI(코드로 추가) ======
+        private readonly Panel _topPanel = new Panel();
+        private readonly ComboBox _cmbFontSize = new ComboBox();
+        // ==========================================
 
         public FormGridZoom(DataGridView source, Form owner, bool placeOnRight, bool hideQvColumn)
         {
@@ -25,23 +35,24 @@ namespace ModbusTester
             Text = $"Zoom - {source.Name}";
             StartPosition = FormStartPosition.Manual;
 
-            // 전체화면 X, 원하는 크기
             Size = new Size(520, 900);
             FormBorderStyle = FormBorderStyle.Sizable;
             MaximizeBox = true;
 
-            // ESC 닫기
             KeyPreview = true;
             KeyDown += (_, e) =>
             {
                 if (e.KeyCode == Keys.Escape) Close();
             };
 
-            // 메인 폼 기준 좌/우 배치
             PlaceNextToOwner(owner, placeOnRight);
 
-            // 더블버퍼(버벅임/깜빡임 체감 개선)
+            // 더블버퍼
             EnableDoubleBuffer(gridZoom);
+
+            // ====== [추가] 상단 콤보박스 UI 붙이기(Designer 수정 없음) ======
+            BuildTopUi();
+            // ===============================================================
 
             // 그리드 구조(컬럼 등) 1회 구성
             BuildColumnsFrom(_src);
@@ -49,12 +60,11 @@ namespace ModbusTester
             // 최초 1회 동기화
             SyncAllRows();
 
-            // 주기적 동기화 (실시간 반영)
-            _syncTimer.Interval = 100; // 100ms (원하면 200으로)
+            // 주기적 동기화
+            _syncTimer.Interval = 100;
             _syncTimer.Tick += (_, __) => SyncAllRows();
             _syncTimer.Start();
 
-            // 닫힐 때 정리
             FormClosed += (_, __) =>
             {
                 try
@@ -66,11 +76,79 @@ namespace ModbusTester
             };
         }
 
+        private void BuildTopUi()
+        {
+            _topPanel.Dock = DockStyle.Top;
+            _topPanel.Height = 36;                 // 살짝 낮게
+            _topPanel.Padding = new Padding(0);    // 패널 자체는 여백 0
+            _topPanel.Margin = new Padding(0);
+
+            // 오른쪽 고정 컨테이너
+            var rightBox = new FlowLayoutPanel();
+            rightBox.Dock = DockStyle.Right;
+            rightBox.AutoSize = true;
+            rightBox.WrapContents = false;
+            rightBox.FlowDirection = FlowDirection.LeftToRight;
+
+            // 여기서만 여백을 준다 (그리드랑 시각적으로 맞춤)
+            rightBox.Padding = new Padding(0, 6, 8, 0);  // top=6, right=8
+            rightBox.Margin = new Padding(0);
+
+            var uiFont = new Font(Font.FontFamily, 11f, FontStyle.Regular);
+
+            var lbl = new Label();
+            lbl.Text = "Font Size";
+            lbl.AutoSize = true;
+            lbl.Font = uiFont;
+            lbl.Margin = new Padding(0, 2, 8, 0);
+
+            _cmbFontSize.DropDownStyle = ComboBoxStyle.DropDownList;
+            _cmbFontSize.Width = 140;
+            _cmbFontSize.Font = uiFont;
+            _cmbFontSize.Margin = new Padding(0, 0, 0, 0);
+
+            // 목록 채우기
+            _cmbFontSize.Items.Clear();
+            _cmbFontSize.Items.AddRange(new object[]
+            {
+        "10", "11", "12", "13", "14", "15", "16", "18", "20", "22", "24"
+            });
+
+            var initial = (int)Math.Round(_src.Font.Size);
+            int idx = _cmbFontSize.Items.IndexOf(initial.ToString());
+            if (idx < 0) idx = _cmbFontSize.Items.IndexOf("10");
+            if (idx < 0) idx = 0;
+            _cmbFontSize.SelectedIndex = idx;
+
+            _cmbFontSize.SelectedIndexChanged += (_, __) =>
+            {
+                if (float.TryParse(_cmbFontSize.SelectedItem?.ToString(), out float fs))
+                    ApplyZoomFontSize(fs);
+            };
+
+            rightBox.Controls.Add(lbl);
+            rightBox.Controls.Add(_cmbFontSize);
+
+            // ✅ 구분선 1px (선택)
+            var line = new Panel();
+            line.Dock = DockStyle.Bottom;
+            line.Height = 1;
+            line.BackColor = Color.Gainsboro;
+
+            _topPanel.Controls.Clear();
+            _topPanel.Controls.Add(rightBox);
+            _topPanel.Controls.Add(line);
+
+            Controls.Add(_topPanel);
+
+            gridZoom.Dock = DockStyle.Fill;
+            _topPanel.BringToFront();
+        }
+
         private void PlaceNextToOwner(Form owner, bool right)
         {
             if (owner == null)
             {
-                // owner가 없으면 그냥 화면 중앙 근처
                 StartPosition = FormStartPosition.CenterScreen;
                 return;
             }
@@ -81,7 +159,6 @@ namespace ModbusTester
             int x = right ? (ob.Right + gap) : (ob.Left - Width - gap);
             int y = ob.Top;
 
-            // 작업표시줄 제외 영역으로 보정
             Rectangle wa = Screen.FromControl(owner).WorkingArea;
 
             if (x < wa.Left) x = wa.Left;
@@ -107,7 +184,6 @@ namespace ModbusTester
 
         private bool IsQvColumn(DataGridViewColumn col)
         {
-            // 프로젝트마다 이름이 다를 수 있어 HeaderText/Name 둘 다 체크
             if (col == null) return false;
             if (string.Equals(col.HeaderText, "QV", StringComparison.OrdinalIgnoreCase)) return true;
             if (col.Name != null && col.Name.IndexOf("QV", StringComparison.OrdinalIgnoreCase) >= 0) return true;
@@ -118,31 +194,38 @@ namespace ModbusTester
         private void BuildColumnsFrom(DataGridView src)
         {
             // 기본 설정
-            gridZoom.Dock = DockStyle.Fill;
             gridZoom.AllowUserToAddRows = false;
             gridZoom.AllowUserToDeleteRows = false;
             gridZoom.RowHeadersVisible = false;
             gridZoom.SelectionMode = src.SelectionMode;
             gridZoom.ReadOnly = src.ReadOnly;
 
-            // 헤더 스타일 테마 덮어쓰기 방지 + 가운데 정렬
+            // 가운데 정렬
             gridZoom.EnableHeadersVisualStyles = false;
             gridZoom.ColumnHeadersDefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
             gridZoom.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
-            // Fill로 꽉 채우기
             gridZoom.AutoSizeColumnsMode = DataGridViewAutoSizeColumnsMode.Fill;
 
-            // 높이/폰트는 원본 느낌 최대한 유지
+            // 원본 느낌 유지
             gridZoom.Font = new Font(src.Font.FontFamily, src.Font.Size, src.Font.Style);
             gridZoom.RowTemplate.Height = src.RowTemplate.Height;
             gridZoom.ColumnHeadersHeight = src.ColumnHeadersHeight;
             gridZoom.ColumnHeadersHeightSizeMode = src.ColumnHeadersHeightSizeMode;
 
-            // 컬럼 구성
+            // ====== 기준값 캡처(최초 1회) ======
+            if (!_baseCaptured)
+            {
+                _baseCaptured = true;
+                _baseFontSize = src.Font.Size;
+                _baseHeaderHeight = src.ColumnHeadersHeight > 0 ? src.ColumnHeadersHeight : 24;
+                _baseRowHeight = src.RowTemplate.Height > 0 ? src.RowTemplate.Height : 22;
+                _baseClientSize = ClientSize;
+            }
+            // ==================================
+
             gridZoom.Columns.Clear();
 
-            // 매핑 만들기 위해 먼저 src 기준으로 dst 인덱스 계산
             _srcToDstColMap = new int[src.Columns.Count];
             for (int i = 0; i < _srcToDstColMap.Length; i++)
                 _srcToDstColMap[i] = -1;
@@ -162,11 +245,9 @@ namespace ModbusTester
                 newCol.Name = col.Name;
                 newCol.ReadOnly = col.ReadOnly;
 
-                // Fill 비율(원본 폭을 가중치로 사용)
                 newCol.AutoSizeMode = DataGridViewAutoSizeColumnMode.Fill;
                 newCol.FillWeight = Math.Max(10, col.Width);
 
-                // 컬럼별 가운데 정렬
                 newCol.DefaultCellStyle.Alignment = DataGridViewContentAlignment.MiddleCenter;
                 newCol.HeaderCell.Style.Alignment = DataGridViewContentAlignment.MiddleCenter;
 
@@ -175,6 +256,7 @@ namespace ModbusTester
                 _srcToDstColMap[col.Index] = dstIndex;
                 dstIndex++;
             }
+
             // QV를 맨 앞으로
             var qvCol = gridZoom.Columns["colRxQuickView"];
             if (qvCol != null)
@@ -185,16 +267,64 @@ namespace ModbusTester
                 c.SortMode = DataGridViewColumnSortMode.NotSortable;
         }
 
+        public void ApplyZoomFontSize(float fontSize)
+        {
+            if (fontSize <= 1f) return;
+
+            float scale = (_baseFontSize <= 0f) ? 1f : (fontSize / _baseFontSize);
+
+            gridZoom.SuspendLayout();
+            try
+            {
+                // 폰트
+                gridZoom.Font = new Font(gridZoom.Font.FontFamily, fontSize, gridZoom.Font.Style);
+
+                // 헤더/행 높이
+                int headerH = Math.Max((int)Math.Round(_baseHeaderHeight * scale), 24);
+                int rowH = Math.Max((int)Math.Round(_baseRowHeight * scale), 22);
+
+                gridZoom.ColumnHeadersHeight = headerH;
+                gridZoom.RowTemplate.Height = rowH;
+
+                foreach (DataGridViewRow r in gridZoom.Rows)
+                    r.Height = rowH;
+
+                // QV 폭 스케일
+                var qv = gridZoom.Columns["colRxQuickView"];
+                if (qv != null)
+                {
+                    int qvW = (int)Math.Round(30 * scale);
+                    qvW = Math.Max(30, qvW);
+                    qvW = Math.Min(60, qvW);
+
+                    qv.AutoSizeMode = DataGridViewAutoSizeColumnMode.None;
+                    qv.Width = qvW;
+                    qv.MinimumWidth = qvW;
+                }
+
+                // 창 크기도 스케일 (뒤 열 잘림 방지)
+                int newW = (int)Math.Round(_baseClientSize.Width * scale);
+                int newH = (int)Math.Round(_baseClientSize.Height * scale);
+
+                newW = Math.Max(480, newW);
+                newH = Math.Max(600, newH);
+
+                ClientSize = new Size(newW, newH);
+            }
+            finally
+            {
+                gridZoom.ResumeLayout();
+            }
+        }
+
         private void SyncAllRows()
         {
-            // 원본이 없어졌으면 중지
             if (_src == null || _src.IsDisposed)
             {
                 try { Close(); } catch { }
                 return;
             }
 
-            // 원본이 다른 스레드에서 바뀌는 경우(드물지만) UI 스레드 보정
             if (InvokeRequired)
             {
                 try { BeginInvoke(new Action(SyncAllRows)); } catch { }
@@ -205,35 +335,32 @@ namespace ModbusTester
 
             try
             {
-                // 1) 원본 유효 행 수 계산
                 int srcRowCount = 0;
                 foreach (DataGridViewRow r in _src.Rows)
                 {
                     if (!r.IsNewRow) srcRowCount++;
                 }
 
-                // 2) 행 개수 맞추기
                 while (gridZoom.Rows.Count < srcRowCount)
                     gridZoom.Rows.Add();
 
                 while (gridZoom.Rows.Count > srcRowCount)
                     gridZoom.Rows.RemoveAt(gridZoom.Rows.Count - 1);
 
-                // 3) 값 복사(변경된 것만)
                 int dstRow = 0;
 
                 foreach (DataGridViewRow row in _src.Rows)
                 {
                     if (row.IsNewRow) continue;
 
-                    // 행 높이도 원본 느낌 유지
-                    if (gridZoom.Rows[dstRow].Height != row.Height)
-                        gridZoom.Rows[dstRow].Height = row.Height;
+                    int desiredH = gridZoom.RowTemplate.Height;
+                    if (gridZoom.Rows[dstRow].Height != desiredH)
+                        gridZoom.Rows[dstRow].Height = desiredH;
 
                     for (int srcCol = 0; srcCol < row.Cells.Count; srcCol++)
                     {
                         int dstCol = _srcToDstColMap[srcCol];
-                        if (dstCol < 0) continue; // QV 제거 등으로 매핑이 없으면 skip
+                        if (dstCol < 0) continue;
 
                         object? newVal = row.Cells[srcCol].Value;
                         object? oldVal = gridZoom.Rows[dstRow].Cells[dstCol].Value;

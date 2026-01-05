@@ -1,5 +1,6 @@
 ﻿using ModbusTester.Macros;
 using ModbusTester.Presets;
+using ModbusTester.Utils;
 using System;
 using System.Collections.Generic;
 using System.Linq;
@@ -9,88 +10,122 @@ namespace ModbusTester
 {
     public partial class FormMacroSetting : Form
     {
-        // 메인 폼 기능(프리셋 실행)을 재사용하기 위해 참조 보관
         private readonly FormMain _main;
-
-        // 현재 UI에 로드된 매크로(편집 대상)
         private MacroDefinition? _current;
-
-        // 저장되지 않은 변경사항이 있는지 표시
         private bool _dirty;
-
-        // Step 딜레이 처리를 위한 UI 타이머
-        private readonly System.Windows.Forms.Timer _runTimer = new System.Windows.Forms.Timer();
-
-        // 실행 상태 관리
-        private bool _running;
-        private int _repeatLeft;
-        private int _stepIndex;
-        private MacroDefinition? _runningMacro; // 실행 중인 매크로 스냅샷(실행 도중 UI가 바뀌어도 실행 상태를 유지)
-
-        // 코드로 UI를 채우는 동안 dirty 표시를 막기 위한 플래그
         private bool _loadingUi;
+
+        private readonly List<MacroInstance> _instances = new List<MacroInstance>();
+        private int _instanceSeq = 0;
+
+        private readonly System.Windows.Forms.Timer _runtimeTimer = new System.Windows.Forms.Timer();
+        private bool _runtimeExecuting;
+
+        private readonly LayoutScaler _layoutScaler;
 
         public FormMacroSetting(FormMain main)
         {
             InitializeComponent();
 
-            // 폼이 키 입력을 먼저 받도록 설정(Ctrl+S 처리용)
-            this.KeyPreview = true;
-            this.KeyDown += FormMacroSetting_KeyDown;
+            _layoutScaler = new LayoutScaler(this);
+            _layoutScaler.ApplyInitialScale(1.058f);
+
+            FormClosing += FormMacroSetting_FormClosing;
+
+            KeyPreview = true;
+            KeyDown += FormMacroSetting_KeyDown;
 
             _main = main;
 
-            // 딜레이 타이머 Tick 연결
-            _runTimer.Tick += RunTimer_Tick;
-
-            // 초기 로드 이벤트
-            this.Load += FormMacroSetting_Load;
-
-            // 목록 선택 변경 시 매크로 로드
+            Load += FormMacroSetting_Load;
             lstMacros.SelectedIndexChanged += LstMacros_SelectedIndexChanged;
 
-            // 매크로 관리 버튼
             btnMacroNew.Click += BtnMacroNew_Click;
             btnMacroDelete.Click += BtnMacroDelete_Click;
             btnMacroSave.Click += BtnMacroSave_Click;
 
-            // Step 편집 버튼
             btnStepAdd.Click += BtnStepAdd_Click;
             btnStepRemove.Click += BtnStepRemove_Click;
             btnStepUp.Click += BtnStepUp_Click;
             btnStepDown.Click += BtnStepDown_Click;
 
-            // 실행 버튼
-            btnStart.Click += BtnStart_Click;
-            btnStop.Click += BtnStop_Click;
+            btnInstStart.Click += BtnInstStart_Click;
+            btnInstStop.Click += BtnInstStop_Click;
+            btnInstStopAll.Click += BtnInstStopAll_Click;
+            btnInstPauseResume.Click += BtnInstPauseResume_Click;
+            btnInstPauseAll.Click += BtnInstPauseAll_Click;
 
-            // 이름/반복 횟수 변경 시 dirty 표시
+
+            btnInstClearSel.Click += BtnInstClearSel_Click;
+            btnInstClearDone.Click += BtnInstClearDone_Click;
+            btnInstClearAll.Click += BtnInstClearAll_Click;
+
             txtMacroName.TextChanged += (_, __) => MarkDirty();
             nudRepeat.ValueChanged += (_, __) => MarkDirty();
 
-            // 그리드 값 변경 시 dirty 표시
             dgvSteps.CellValueChanged += (_, __) => MarkDirty();
 
-            // ComboBox 셀은 선택 변경 시 값 확정이 늦을 수 있어 즉시 Commit
             dgvSteps.CurrentCellDirtyStateChanged += (_, __) =>
             {
                 if (dgvSteps.IsCurrentCellDirty)
                     dgvSteps.CommitEdit(DataGridViewDataErrorContexts.Commit);
             };
 
-            // ComboBox 값 불일치 등 DataError가 떠도 폼이 죽지 않게 방지
             dgvSteps.DataError += (_, __) => { };
+
+            dgvInstances.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
+            dgvInstances.MultiSelect = true;
+            dgvInstances.ReadOnly = true;
+            dgvInstances.AllowUserToAddRows = false;
+            dgvInstances.AllowUserToDeleteRows = false;
+            dgvInstances.AllowUserToResizeRows = false;
+            dgvInstances.RowHeadersVisible = false;
+
+            dgvInstances.SelectionChanged += (_, __) => UpdatePauseResumeButtonText();
+            dgvInstances.SelectionChanged += (_, __) => UpdatePauseAllButtonText();
+
+            _runtimeTimer.Interval = 50;
+            _runtimeTimer.Tick += RuntimeTimer_Tick;
+            _runtimeTimer.Start();
         }
+
+        private void FormMacroSetting_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            // 1) 실행 중인 인스턴스는 전부 Stop
+            StopAllInstancesOnClose();
+
+            // 2) 타이머도 확실히 종료 (Dispose 되지 않고 Hide될 경우를 대비)
+            try
+            {
+                _runtimeTimer.Stop();
+                _runtimeTimer.Tick -= RuntimeTimer_Tick;
+                _runtimeTimer.Dispose();
+            }
+            catch { }
+        }
+
+        private void StopAllInstancesOnClose()
+        {
+            foreach (var inst in _instances)
+            {
+                if (inst.State is InstanceState.Running or InstanceState.Waiting or InstanceState.Paused)
+                    inst.Stop("Form Closed");
+            }
+
+            RefreshAllInstancesGridRows();
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+            UpdatePauseAllButtonText();
+        }
+
 
         private void FormMacroSetting_KeyDown(object? sender, KeyEventArgs e)
         {
-            // Ctrl+S 저장
             if (e.Control && e.KeyCode == Keys.S)
             {
                 e.SuppressKeyPress = true;
                 e.Handled = true;
 
-                // 그리드 편집 중이면 값 확정 후 저장
                 dgvSteps.EndEdit();
                 btnMacroSave.PerformClick();
             }
@@ -98,22 +133,18 @@ namespace ModbusTester
 
         private void FormMacroSetting_Load(object? sender, EventArgs e)
         {
-            // 프리셋 목록을 Step 콤보박스에 채움
             InitPresetComboSource();
 
-            // 저장된 매크로 로드 후 목록 갱신
             MacroManager.Load();
             RefreshMacroList();
 
-            SetStatus("Status: Idle");
-            btnStop.Enabled = false;
+            UpdateTitleDirtyMark();
+            UpdateRuntimeStatusText();
 
-            // 매크로가 있으면 첫 항목 자동 선택
             if (lstMacros.Items.Count > 0)
                 lstMacros.SelectedIndex = 0;
         }
 
-        // 외부에서 프리셋 목록 변경 시 호출(ComboBox 갱신용)
         public void RefreshPresetCombo()
         {
             InitPresetComboSource();
@@ -121,12 +152,10 @@ namespace ModbusTester
 
         private void InitPresetComboSource()
         {
-            // dgvSteps의 Preset 컬럼이 ComboBox일 때만 처리
             if (colPreset is DataGridViewComboBoxColumn combo)
             {
                 combo.Items.Clear();
 
-                // 프리셋 이름만 모아서 정렬 후 주입
                 var names = FunctionPresetManager.Items
                     .Select(p => p.Name)
                     .Where(n => !string.IsNullOrWhiteSpace(n))
@@ -145,7 +174,6 @@ namespace ModbusTester
             foreach (var m in MacroManager.Items)
                 lstMacros.Items.Add(m.Name);
 
-            // 저장/생성 후 특정 이름을 다시 선택하고 싶을 때 사용
             if (!string.IsNullOrEmpty(selectName))
             {
                 for (int i = 0; i < lstMacros.Items.Count; i++)
@@ -161,10 +189,6 @@ namespace ModbusTester
 
         private void LstMacros_SelectedIndexChanged(object? sender, EventArgs e)
         {
-            // 실행 중에는 선택 변경 금지
-            if (_running) return;
-
-            // 저장 안 된 변경이 있으면 경고
             if (_dirty && _current != null)
             {
                 var r = MessageBox.Show(this,
@@ -192,17 +216,14 @@ namespace ModbusTester
             _loadingUi = true;
             try
             {
-                // 원본을 직접 수정하지 않도록 복제본을 편집 대상으로 사용
                 _current = Clone(macro);
                 _dirty = false;
 
                 txtMacroName.Text = _current.Name;
 
-                // 범위를 벗어나는 값이 있어도 안전하게 표시
                 nudRepeat.Value = Math.Max(nudRepeat.Minimum,
                     Math.Min(nudRepeat.Maximum, _current.Repeat));
 
-                // Step 그리드 채우기
                 dgvSteps.Rows.Clear();
                 for (int i = 0; i < _current.Steps.Count; i++)
                 {
@@ -221,9 +242,6 @@ namespace ModbusTester
 
         private void BtnMacroNew_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
-            // 중복 없는 이름 생성 후 빈 매크로 추가
             var name = MacroManager.CreateUniqueName("Macro");
             var macro = new MacroDefinition
             {
@@ -238,12 +256,21 @@ namespace ModbusTester
 
         private void BtnMacroDelete_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
             if (lstMacros.SelectedItem is not string name)
             {
                 MessageBox.Show(this, "삭제할 Macro를 선택해 주세요.", "Macro",
                     MessageBoxButtons.OK, MessageBoxIcon.Information);
+                return;
+            }
+
+            if (_instances.Any(x => x.DefinitionName.Equals(name, StringComparison.OrdinalIgnoreCase)
+                                 && x.State is InstanceState.Running or InstanceState.Waiting or InstanceState.Paused))
+            {
+                MessageBox.Show(this,
+                    "해당 Macro로 실행 중인 인스턴스가 있습니다.\r\n먼저 인스턴스를 Stop 하세요.",
+                    "Macro Delete",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
                 return;
             }
 
@@ -255,7 +282,6 @@ namespace ModbusTester
 
             MacroManager.Delete(name);
 
-            // UI 초기화
             _current = null;
             _dirty = false;
             txtMacroName.Clear();
@@ -263,14 +289,17 @@ namespace ModbusTester
             dgvSteps.Rows.Clear();
 
             RefreshMacroList();
-            SetStatus("Status: Idle");
+            UpdateTitleDirtyMark();
         }
 
         private void BtnMacroSave_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
+            // 최소 수정: "Rename" 처리
+            // _current.Name(기존 이름)과 UI의 이름이 다르면:
+            // 1) 실행 중인 인스턴스가 있으면 rename 막기(안전)
+            // 2) 기존 이름 삭제 후 새 이름으로 AddOrUpdate
+            string? oldName = _current?.Name;
 
-            // UI 내용을 매크로 객체로 조립(검증 포함)
             if (!TryBuildMacroFromUi(out var macro, out var error))
             {
                 MessageBox.Show(this, error, "Macro Save",
@@ -278,14 +307,51 @@ namespace ModbusTester
                 return;
             }
 
-            // 저장 후 현재 상태 갱신
+            string newName = macro.Name;
+
+            bool isRename = !string.IsNullOrWhiteSpace(oldName)
+                            && !oldName.Equals(newName, StringComparison.OrdinalIgnoreCase);
+
+            if (isRename)
+            {
+                // 실행 중인 인스턴스가 oldName 기준으로 돌고 있으면 rename 금지
+                bool hasRunning = _instances.Any(x =>
+                    x.DefinitionName.Equals(oldName, StringComparison.OrdinalIgnoreCase)
+                    && x.State is InstanceState.Running or InstanceState.Waiting or InstanceState.Paused);
+
+                if (hasRunning)
+                {
+                    MessageBox.Show(this,
+                        "해당 Macro로 실행 중인 인스턴스가 있습니다.\r\n인스턴스를 Stop 한 뒤 이름을 변경해 주세요.",
+                        "Macro Save",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // 새 이름이 이미 존재하면 충돌 방지
+                var exist = MacroManager.Find(newName);
+                if (exist != null)
+                {
+                    MessageBox.Show(this,
+                        "동일한 이름의 Macro가 이미 존재합니다.\r\n다른 이름으로 저장해 주세요.",
+                        "Macro Save",
+                        MessageBoxButtons.OK,
+                        MessageBoxIcon.Warning);
+                    return;
+                }
+
+                // rename: old 삭제 후 new 저장
+                MacroManager.Delete(oldName!);
+            }
+
             MacroManager.AddOrUpdate(macro);
+
             _current = Clone(macro);
             _dirty = false;
 
             RefreshMacroList(macro.Name);
             UpdateTitleDirtyMark();
-            SetStatus("Status: Saved");
         }
 
         private bool TryBuildMacroFromUi(out MacroDefinition macro, out string error)
@@ -305,7 +371,6 @@ namespace ModbusTester
 
             var steps = new List<MacroStep>();
 
-            // 그리드의 각 행을 Step으로 변환
             for (int i = 0; i < dgvSteps.Rows.Count; i++)
             {
                 var row = dgvSteps.Rows[i];
@@ -339,9 +404,6 @@ namespace ModbusTester
 
         private void BtnStepAdd_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
-            // Preset은 기본값 null(사용자가 선택)
             dgvSteps.Rows.Add((dgvSteps.Rows.Count + 1).ToString(), null, "0");
             UpdateStepNumbers();
             MarkDirty();
@@ -349,8 +411,6 @@ namespace ModbusTester
 
         private void BtnStepRemove_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
             if (dgvSteps.SelectedRows.Count == 0)
                 return;
 
@@ -361,8 +421,6 @@ namespace ModbusTester
 
         private void BtnStepUp_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
             if (dgvSteps.SelectedRows.Count == 0) return;
             int idx = dgvSteps.SelectedRows[0].Index;
             if (idx <= 0) return;
@@ -375,8 +433,6 @@ namespace ModbusTester
 
         private void BtnStepDown_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
             if (dgvSteps.SelectedRows.Count == 0) return;
             int idx = dgvSteps.SelectedRows[0].Index;
             if (idx >= dgvSteps.Rows.Count - 1) return;
@@ -389,7 +445,6 @@ namespace ModbusTester
 
         private void SwapRows(int a, int b)
         {
-            // 번호 컬럼은 고정이고, Preset/Delay만 서로 교환
             var ra = dgvSteps.Rows[a];
             var rb = dgvSteps.Rows[b];
 
@@ -405,16 +460,12 @@ namespace ModbusTester
 
         private void UpdateStepNumbers()
         {
-            // 첫 번째 컬럼에 보이는 Step 번호 재정렬
             for (int i = 0; i < dgvSteps.Rows.Count; i++)
                 dgvSteps.Rows[i].Cells[0].Value = (i + 1).ToString();
         }
 
-        private void BtnStart_Click(object? sender, EventArgs e)
+        private void BtnInstStart_Click(object? sender, EventArgs e)
         {
-            if (_running) return;
-
-            // 저장 여부와 상관없이 현재 UI 상태로 실행
             if (!TryBuildMacroFromUi(out var macro, out var error))
             {
                 MessageBox.Show(this, error, "Macro Run",
@@ -429,142 +480,306 @@ namespace ModbusTester
                 return;
             }
 
-            // 실행 중 UI 변경을 막기 위해 버튼 잠금
-            _running = true;
-            btnStart.Enabled = false;
-            btnStop.Enabled = true;
-            btnMacroSave.Enabled = false;
-            btnMacroNew.Enabled = false;
-            btnMacroDelete.Enabled = false;
+            var inst = CreateInstanceFromMacro(macro);
+            _instances.Add(inst);
+            AddInstanceRow(inst);
 
-            _repeatLeft = Math.Max(1, macro.Repeat);
-            _stepIndex = 0;
-
-            // 진행 표시 초기화
-            progressStep.Minimum = 0;
-            progressStep.Maximum = macro.Steps.Count;
-            progressStep.Value = 0;
-
-            SetStatus($"Status: Running (1/{_repeatLeft})");
-
-            _runningMacro = macro;
-            RunOneStep();
+            UpdateRuntimeStatusText();
         }
 
-        private void BtnStop_Click(object? sender, EventArgs e)
+        private void BtnInstStop_Click(object? sender, EventArgs e)
         {
-            StopRun("Status: Stopped", StopReason.Stopped);
+            var list = GetSelectedInstances();
+            if (list.Count == 0) return;
+
+            foreach (var inst in list)
+                inst.Stop("Stopped");
+
+            RefreshInstancesGridRows(list);
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
         }
 
-        private enum StopReason
+        private void BtnInstStopAll_Click(object? sender, EventArgs e)
         {
-            Completed,
-            Stopped,
-            Error
-        }
-
-        private void StopRun(string statusText, StopReason reason)
-        {
-            _runTimer.Stop();
-            _running = false;
-
-            btnStart.Enabled = true;
-            btnStop.Enabled = false;
-            btnMacroSave.Enabled = true;
-            btnMacroNew.Enabled = true;
-            btnMacroDelete.Enabled = true;
-
-            SetStatus(statusText);
-
-            // 진행바 정책
-            if (reason == StopReason.Completed)
+            foreach (var inst in _instances)
             {
-                // 완료는 끝까지 채워서 남김
-                progressStep.Value = progressStep.Maximum;
+                if (inst.State is InstanceState.Running or InstanceState.Waiting or InstanceState.Paused)
+                    inst.Stop("Stopped");
+            }
+
+            RefreshAllInstancesGridRows();
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+        }
+
+        private void BtnInstPauseResume_Click(object? sender, EventArgs e)
+        {
+            var list = GetSelectedInstances();
+            if (list.Count == 0) return;
+
+            foreach (var inst in list)
+            {
+                if (inst.State == InstanceState.Paused)
+                    inst.Resume();
+                else if (inst.State is InstanceState.Running or InstanceState.Waiting)
+                    inst.Pause();
+            }
+
+            RefreshInstancesGridRows(list);
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+        }
+        private void UpdatePauseResumeButtonText()
+        {
+            // 선택된 인스턴스 중 "Paused"가 하나라도 있으면 Resume 표시
+            var list = GetSelectedInstances();
+
+            if (list.Count == 0)
+            {
+                btnInstPauseResume.Text = "Pause";
+                return;
+            }
+
+            bool anyPaused = list.Any(x => x.State == InstanceState.Paused);
+            btnInstPauseResume.Text = anyPaused ? "Resume" : "Pause";
+        }
+        private void BtnInstPauseAll_Click(object? sender, EventArgs e)
+        {
+            // 실행 중(Waiting/Running) 인스턴스가 하나라도 있으면 "Pause All" 가능
+            // Paused가 하나라도 있으면 "Resume All"로 동작(Paused 전부 Resume)
+
+            bool anyPaused = _instances.Any(x => x.State == InstanceState.Paused);
+            bool anyActive = _instances.Any(x => x.State is InstanceState.Running or InstanceState.Waiting);
+
+            if (!anyPaused && !anyActive)
+                return; // 멈춰있거나 완료/에러만 있으면 할 일 없음
+
+            if (anyPaused)
+            {
+                // Resume All: Paused만 Resume
+                foreach (var inst in _instances)
+                {
+                    if (inst.State == InstanceState.Paused)
+                        inst.Resume();
+                }
             }
             else
             {
-                // Stopped/Error는 현재 값 유지(리셋하지 않음)
-                // 필요하면 여기서만 0으로 바꾸는 정책도 가능
+                // Pause All: Running/Waiting만 Pause
+                foreach (var inst in _instances)
+                {
+                    if (inst.State is InstanceState.Running or InstanceState.Waiting)
+                        inst.Pause();
+                }
             }
+
+            RefreshAllInstancesGridRows();
+            UpdateRuntimeStatusText();
+
+            // 기존 버튼(선택 Pause/Resume) 텍스트도 갱신
+            UpdatePauseResumeButtonText();
+
+            // Pause All 버튼 텍스트도 갱신
+            UpdatePauseAllButtonText();
         }
 
-        private void RunOneStep()
+        private void UpdatePauseAllButtonText()
         {
-            if (!_running || _runningMacro == null)
+            // 하나라도 Paused가 있으면 Resume All, 아니면 Pause All
+            bool anyPaused = _instances.Any(x => x.State == InstanceState.Paused);
+            btnInstPauseAll.Text = anyPaused ? "Resume All" : "Pause All";
+        }
+
+
+        private void BtnInstClearSel_Click(object? sender, EventArgs e)
+        {
+            var list = GetSelectedInstances();
+            if (list.Count == 0) return;
+
+            foreach (var inst in list)
+            {
+                if (inst.State is InstanceState.Completed or InstanceState.Stopped or InstanceState.Error)
+                    _instances.Remove(inst);
+            }
+
+            RebuildInstancesGrid();
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+        }
+
+        private void BtnInstClearDone_Click(object? sender, EventArgs e)
+        {
+            _instances.RemoveAll(x => x.State is InstanceState.Completed or InstanceState.Stopped or InstanceState.Error);
+            RebuildInstancesGrid();
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+        }
+
+        private void BtnInstClearAll_Click(object? sender, EventArgs e)
+        {
+            _instances.Clear();
+            RebuildInstancesGrid();
+            UpdateRuntimeStatusText();
+            UpdatePauseResumeButtonText();
+        }
+
+        private void RebuildInstancesGrid()
+        {
+            dgvInstances.Rows.Clear();
+            foreach (var inst in _instances)
+                AddInstanceRow(inst);
+        }
+
+        private void RuntimeTimer_Tick(object? sender, EventArgs e)
+        {
+            if (_runtimeExecuting) return;
+
+            var now = DateTime.Now;
+
+            var due = _instances
+                .Where(x => x.IsDue(now))
+                .OrderBy(x => x.NextDue)
+                .FirstOrDefault();
+
+            if (due == null)
                 return;
 
-            var macro = _runningMacro;
-
-            // 한 바퀴 끝났으면 반복 처리
-            if (_stepIndex >= macro.Steps.Count)
+            try
             {
-                _repeatLeft--;
-                if (_repeatLeft <= 0)
+                _runtimeExecuting = true;
+
+                due.MarkExecuting();
+                RefreshInstanceGridRow(due);
+
+                var step = due.GetCurrentStep();
+                if (step == null)
                 {
-                    StopRun("Status: Completed", StopReason.Completed);
+                    due.CompleteIfDone();
+                    RefreshInstanceGridRow(due);
+                    UpdateRuntimeStatusText();
+                    UpdatePauseResumeButtonText(); 
+
                     return;
                 }
 
+                bool ok = _main.TryRunPresetByName(step.PresetName, out string err);
 
-                _stepIndex = 0;
-                progressStep.Value = 0;
+                if (!ok)
+                {
+                    due.Fail(err);
+                    RefreshInstanceGridRow(due);
+                    UpdateRuntimeStatusText();
+                    UpdatePauseResumeButtonText(); 
 
-                int done = (macro.Repeat - _repeatLeft) + 1;
-                SetStatus($"Status: Running ({done}/{macro.Repeat})");
+                    MessageBox.Show(this, err, "Macro Run",
+                        MessageBoxButtons.OK, MessageBoxIcon.Error);
+                    return;
+                }
+
+                due.OnStepSuccess(step.DelayMs);
+                RefreshInstanceGridRow(due);
+                UpdateRuntimeStatusText();
+                UpdatePauseResumeButtonText(); 
             }
-
-            // 현재 Step 실행
-            var step = macro.Steps[_stepIndex];
-
-            // 실제 실행은 메인 폼의 Preset 실행 로직을 사용
-            if (!_main.TryRunPresetByName(step.PresetName, out string err))
+            finally
             {
-                StopRun($"Status: Error ({err})", StopReason.Error);
-                MessageBox.Show(this, err, "Macro Run",
-                    MessageBoxButtons.OK, MessageBoxIcon.Error);
-                return;
+                _runtimeExecuting = false;
             }
-
-
-            // 진행 표시 업데이트
-            progressStep.Value = Math.Min(progressStep.Maximum, _stepIndex + 1);
-
-            int delay = Math.Max(0, step.DelayMs);
-            _stepIndex++;
-
-            // 딜레이가 없으면 즉시 다음 Step 진행
-            if (delay <= 0)
-            {
-                RunOneStep();
-                return;
-            }
-
-            // 딜레이가 있으면 타이머로 대기 후 다음 Step 진행
-            SetStatus($"Status: Delay {delay} ms");
-            _runTimer.Interval = delay;
-            _runTimer.Start();
         }
 
-        private void RunTimer_Tick(object? sender, EventArgs e)
+        private MacroInstance CreateInstanceFromMacro(MacroDefinition macroSnapshot)
         {
-            // 딜레이 종료 후 다음 Step 진행
-            _runTimer.Stop();
-            if (!_running || _runningMacro == null) return;
+            _instanceSeq++;
 
-            SetStatus("Status: Running");
-            RunOneStep();
+            int sameCount = _instances.Count(x =>
+                x.DefinitionName.Equals(macroSnapshot.Name, StringComparison.OrdinalIgnoreCase)) + 1;
+
+            return new MacroInstance(
+                id: _instanceSeq,
+                displayName: $"{macroSnapshot.Name}#{sameCount}",
+                definitionName: macroSnapshot.Name,
+                macro: Clone(macroSnapshot));
         }
 
-        private void SetStatus(string text)
+        private void AddInstanceRow(MacroInstance inst)
         {
-            lblStatus.Text = text;
+            int r = dgvInstances.Rows.Add(
+                inst.Id.ToString(),
+                inst.DisplayName,
+                inst.State.ToString(),
+                inst.RepeatText,
+                inst.StepText,
+                inst.NextText,
+                inst.LastResult);
+
+            dgvInstances.Rows[r].Tag = inst;
+        }
+
+        private List<MacroInstance> GetSelectedInstances()
+        {
+            var list = new List<MacroInstance>();
+            foreach (DataGridViewRow row in dgvInstances.SelectedRows)
+            {
+                if (row.Tag is MacroInstance inst)
+                    list.Add(inst);
+            }
+            return list;
+        }
+
+        private void RefreshAllInstancesGridRows()
+        {
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                if (row.Tag is MacroInstance inst)
+                    ApplyInstanceToRow(row, inst);
+            }
+        }
+
+        private void RefreshInstancesGridRows(IEnumerable<MacroInstance> list)
+        {
+            var set = new HashSet<MacroInstance>(list);
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                if (row.Tag is MacroInstance inst && set.Contains(inst))
+                    ApplyInstanceToRow(row, inst);
+            }
+        }
+
+        private void RefreshInstanceGridRow(MacroInstance inst)
+        {
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                if (ReferenceEquals(row.Tag, inst))
+                {
+                    ApplyInstanceToRow(row, inst);
+                    return;
+                }
+            }
+        }
+
+        private void ApplyInstanceToRow(DataGridViewRow row, MacroInstance inst)
+        {
+            row.Cells[0].Value = inst.Id.ToString();
+            row.Cells[1].Value = inst.DisplayName;
+            row.Cells[2].Value = inst.State.ToString();
+            row.Cells[3].Value = inst.RepeatText;
+            row.Cells[4].Value = inst.StepText;
+            row.Cells[5].Value = inst.NextText;
+            row.Cells[6].Value = inst.LastResult;
+        }
+
+        private void UpdateRuntimeStatusText()
+        {
+            int running = _instances.Count(x => x.State == InstanceState.Running || x.State == InstanceState.Waiting);
+            int paused = _instances.Count(x => x.State == InstanceState.Paused);
+            int error = _instances.Count(x => x.State == InstanceState.Error);
+
+            grpRuntime.Text = $"Runtime / Execution   Running({running})  Paused({paused})  Error({error})  Total({_instances.Count})";
         }
 
         private void MarkDirty()
         {
-            // 실행 중이거나, 코드로 UI를 채우는 중이면 dirty 처리하지 않음
-            if (_running) return;
             if (_loadingUi) return;
 
             _dirty = true;
@@ -573,13 +788,11 @@ namespace ModbusTester
 
         private void UpdateTitleDirtyMark()
         {
-            // 저장 안 된 변경사항이 있으면 제목에 표시
-            this.Text = _dirty ? "Macro Setting *" : "Macro Setting";
+            Text = _dirty ? "Macro Setting *" : "Macro Setting";
         }
 
         private static MacroDefinition Clone(MacroDefinition src)
         {
-            // UI 편집용으로 안전하게 복제(원본 보호)
             return new MacroDefinition
             {
                 Name = src.Name,
@@ -590,6 +803,170 @@ namespace ModbusTester
                     DelayMs = s.DelayMs
                 }).ToList()
             };
+        }
+
+        private enum InstanceState
+        {
+            Waiting,
+            Running,
+            Paused,
+            Completed,
+            Stopped,
+            Error
+        }
+
+        private sealed class MacroInstance
+        {
+            public MacroInstance(int id, string displayName, string definitionName, MacroDefinition macro)
+            {
+                Id = id;
+                DisplayName = displayName;
+                DefinitionName = definitionName;
+                Macro = macro;
+
+                RepeatTotal = Math.Max(1, macro.Repeat);
+                RepeatDone = 0;
+                StepIndex = 0;
+
+                State = InstanceState.Waiting;
+                NextDue = DateTime.Now;
+                LastResult = "-";
+            }
+
+            public int Id { get; }
+            public string DisplayName { get; }
+            public string DefinitionName { get; }
+            public MacroDefinition Macro { get; }
+
+            public InstanceState State { get; private set; }
+
+            public int RepeatTotal { get; }
+            public int RepeatDone { get; private set; }
+            public int StepIndex { get; private set; }
+
+            public DateTime NextDue { get; private set; }
+            public string LastResult { get; private set; }
+
+            public string RepeatText => $"{Math.Min(RepeatTotal, RepeatDone + 1)}/{RepeatTotal}";
+            public string StepText => $"{Math.Min(Macro.Steps.Count, StepIndex + 1)}/{Macro.Steps.Count}";
+
+            public string NextText
+            {
+                get
+                {
+                    if (State == InstanceState.Paused) return "-";
+                    if (State == InstanceState.Completed) return "-";
+                    if (State == InstanceState.Stopped) return "-";
+                    if (State == InstanceState.Error) return "-";
+
+                    var ms = (int)Math.Max(0, (NextDue - DateTime.Now).TotalMilliseconds);
+                    return ms.ToString();
+                }
+            }
+
+            public bool IsDue(DateTime now)
+            {
+                if (State == InstanceState.Paused) return false;
+                if (State == InstanceState.Completed) return false;
+                if (State == InstanceState.Stopped) return false;
+                if (State == InstanceState.Error) return false;
+
+                return now >= NextDue;
+            }
+
+            public void MarkExecuting()
+            {
+                if (State == InstanceState.Waiting)
+                    State = InstanceState.Running;
+            }
+
+            public MacroStep? GetCurrentStep()
+            {
+                if (State == InstanceState.Stopped || State == InstanceState.Error || State == InstanceState.Completed)
+                    return null;
+
+                if (Macro.Steps == null || Macro.Steps.Count == 0)
+                    return null;
+
+                if (StepIndex >= Macro.Steps.Count)
+                    return null;
+
+                return Macro.Steps[StepIndex];
+            }
+
+            public void OnStepSuccess(int delayMs)
+            {
+                LastResult = "OK";
+                StepIndex++;
+
+                if (StepIndex >= Macro.Steps.Count)
+                {
+                    RepeatDone++;
+                    if (RepeatDone >= RepeatTotal)
+                    {
+                        State = InstanceState.Completed;
+                        NextDue = DateTime.MaxValue;
+                        return;
+                    }
+
+                    StepIndex = 0;
+                }
+
+                int d = Math.Max(0, delayMs);
+                NextDue = DateTime.Now.AddMilliseconds(d);
+
+                if (State == InstanceState.Running)
+                    State = InstanceState.Waiting;
+            }
+
+            public void CompleteIfDone()
+            {
+                if (Macro.Steps == null || Macro.Steps.Count == 0)
+                {
+                    State = InstanceState.Completed;
+                    LastResult = "No Steps";
+                    NextDue = DateTime.MaxValue;
+                    return;
+                }
+
+                if (RepeatDone >= RepeatTotal)
+                {
+                    State = InstanceState.Completed;
+                    NextDue = DateTime.MaxValue;
+                }
+            }
+
+            public void Stop(string reason)
+            {
+                State = InstanceState.Stopped;
+                LastResult = reason;
+                NextDue = DateTime.MaxValue;
+            }
+
+            public void Pause()
+            {
+                if (State is InstanceState.Completed or InstanceState.Error or InstanceState.Stopped)
+                    return;
+
+                State = InstanceState.Paused;
+                LastResult = "Paused";
+            }
+
+            public void Resume()
+            {
+                if (State != InstanceState.Paused) return;
+
+                State = InstanceState.Waiting;
+                LastResult = "Resumed";
+                NextDue = DateTime.Now;
+            }
+
+            public void Fail(string err)
+            {
+                State = InstanceState.Error;
+                LastResult = string.IsNullOrWhiteSpace(err) ? "Error" : err;
+                NextDue = DateTime.MaxValue;
+            }
         }
     }
 }

@@ -179,7 +179,6 @@ namespace ModbusTester
         {
             if (sender is not DataGridView g) return;
 
-            // RX 확대창이 이미 있으면 재사용
             if (_rxZoom != null && !_rxZoom.IsDisposed)
             {
                 _rxZoom.BringToFront();
@@ -187,8 +186,7 @@ namespace ModbusTester
                 return;
             }
 
-            // 새로 생성
-            _rxZoom = new FormGridZoom(gridRx, this, placeOnRight: true, hideQvColumn: false);
+            _rxZoom = new FormGridZoom(g, this, placeOnRight: true, hideQvColumn: false);
             _rxZoom.FormClosed += (_, __) => _rxZoom = null;
             _rxZoom.Show(this);
         }

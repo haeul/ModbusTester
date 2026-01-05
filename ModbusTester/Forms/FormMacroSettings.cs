@@ -23,9 +23,22 @@ namespace ModbusTester
 
         private readonly LayoutScaler _layoutScaler;
 
+        // ===== Runtime Grid Column Index (체크박스 컬럼 추가로 인덱스 +1) =====
+        private const int COL_CHK = 0;
+        private const int COL_ID = 1;
+        private const int COL_MACRO = 2;
+        private const int COL_STATUS = 3;
+        private const int COL_REPEAT = 4;
+        private const int COL_STEP = 5;
+        private const int COL_NEXT = 6;
+        private const int COL_LAST = 7;
+
         public FormMacroSetting(FormMain main)
         {
             InitializeComponent();
+
+            // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 
             _layoutScaler = new LayoutScaler(this);
             _layoutScaler.ApplyInitialScale(1.058f);
@@ -55,9 +68,13 @@ namespace ModbusTester
             btnInstPauseResume.Click += BtnInstPauseResume_Click;
             btnInstPauseAll.Click += BtnInstPauseAll_Click;
 
+            // 기존 Clear Select / Clear Done 제거
+            // btnInstClearSel.Click += BtnInstClearSel_Click;
+            // btnInstClearDone.Click += BtnInstClearDone_Click;
 
-            btnInstClearSel.Click += BtnInstClearSel_Click;
-            btnInstClearDone.Click += BtnInstClearDone_Click;
+            // Clear 버튼 하나로 통합 (체크 기준)
+            btnInstClear.Click += BtnInstClear_Click;
+
             btnInstClearAll.Click += BtnInstClearAll_Click;
 
             txtMacroName.TextChanged += (_, __) => MarkDirty();
@@ -75,11 +92,30 @@ namespace ModbusTester
 
             dgvInstances.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvInstances.MultiSelect = true;
-            dgvInstances.ReadOnly = true;
+
+            // 체크박스만 편집 가능해야 하므로 ReadOnly 전체 true는 제거하고 컬럼별 제어
+            dgvInstances.ReadOnly = false;
             dgvInstances.AllowUserToAddRows = false;
             dgvInstances.AllowUserToDeleteRows = false;
             dgvInstances.AllowUserToResizeRows = false;
             dgvInstances.RowHeadersVisible = false;
+
+            // 체크박스 즉시 반영
+            dgvInstances.CurrentCellDirtyStateChanged += (_, __) =>
+            {
+                if (dgvInstances.IsCurrentCellDirty)
+                    dgvInstances.CommitEdit(DataGridViewDataErrorContexts.Commit);
+            };
+
+            // 체크박스 헤더 클릭으로 전체 체크/해제
+            dgvInstances.ColumnHeaderMouseClick += DgvInstances_ColumnHeaderMouseClick;
+
+            // 체크박스 외 컬럼은 ReadOnly 유지
+            foreach (DataGridViewColumn col in dgvInstances.Columns)
+            {
+                if (col.Index != COL_CHK)
+                    col.ReadOnly = true;
+            }
 
             dgvInstances.SelectionChanged += (_, __) => UpdatePauseResumeButtonText();
             dgvInstances.SelectionChanged += (_, __) => UpdatePauseAllButtonText();
@@ -117,7 +153,6 @@ namespace ModbusTester
             UpdatePauseResumeButtonText();
             UpdatePauseAllButtonText();
         }
-
 
         private void FormMacroSetting_KeyDown(object? sender, KeyEventArgs e)
         {
@@ -269,8 +304,7 @@ namespace ModbusTester
                 MessageBox.Show(this,
                     "해당 Macro로 실행 중인 인스턴스가 있습니다.\r\n먼저 인스턴스를 Stop 하세요.",
                     "Macro Delete",
-                    MessageBoxButtons.OK,
-                    MessageBoxIcon.Warning);
+                    MessageBoxButtons.OK, MessageBoxIcon.Warning);
                 return;
             }
 
@@ -294,10 +328,6 @@ namespace ModbusTester
 
         private void BtnMacroSave_Click(object? sender, EventArgs e)
         {
-            // 최소 수정: "Rename" 처리
-            // _current.Name(기존 이름)과 UI의 이름이 다르면:
-            // 1) 실행 중인 인스턴스가 있으면 rename 막기(안전)
-            // 2) 기존 이름 삭제 후 새 이름으로 AddOrUpdate
             string? oldName = _current?.Name;
 
             if (!TryBuildMacroFromUi(out var macro, out var error))
@@ -314,7 +344,6 @@ namespace ModbusTester
 
             if (isRename)
             {
-                // 실행 중인 인스턴스가 oldName 기준으로 돌고 있으면 rename 금지
                 bool hasRunning = _instances.Any(x =>
                     x.DefinitionName.Equals(oldName, StringComparison.OrdinalIgnoreCase)
                     && x.State is InstanceState.Running or InstanceState.Waiting or InstanceState.Paused);
@@ -329,7 +358,6 @@ namespace ModbusTester
                     return;
                 }
 
-                // 새 이름이 이미 존재하면 충돌 방지
                 var exist = MacroManager.Find(newName);
                 if (exist != null)
                 {
@@ -341,7 +369,6 @@ namespace ModbusTester
                     return;
                 }
 
-                // rename: old 삭제 후 new 저장
                 MacroManager.Delete(oldName!);
             }
 
@@ -489,7 +516,7 @@ namespace ModbusTester
 
         private void BtnInstStop_Click(object? sender, EventArgs e)
         {
-            var list = GetSelectedInstances();
+            var list = GetTargetInstancesPreferChecked();
             if (list.Count == 0) return;
 
             foreach (var inst in list)
@@ -515,7 +542,7 @@ namespace ModbusTester
 
         private void BtnInstPauseResume_Click(object? sender, EventArgs e)
         {
-            var list = GetSelectedInstances();
+            var list = GetTargetInstancesPreferChecked();
             if (list.Count == 0) return;
 
             foreach (var inst in list)
@@ -530,10 +557,10 @@ namespace ModbusTester
             UpdateRuntimeStatusText();
             UpdatePauseResumeButtonText();
         }
+
         private void UpdatePauseResumeButtonText()
         {
-            // 선택된 인스턴스 중 "Paused"가 하나라도 있으면 Resume 표시
-            var list = GetSelectedInstances();
+            var list = GetTargetInstancesPreferChecked();
 
             if (list.Count == 0)
             {
@@ -544,20 +571,17 @@ namespace ModbusTester
             bool anyPaused = list.Any(x => x.State == InstanceState.Paused);
             btnInstPauseResume.Text = anyPaused ? "Resume" : "Pause";
         }
+
         private void BtnInstPauseAll_Click(object? sender, EventArgs e)
         {
-            // 실행 중(Waiting/Running) 인스턴스가 하나라도 있으면 "Pause All" 가능
-            // Paused가 하나라도 있으면 "Resume All"로 동작(Paused 전부 Resume)
-
             bool anyPaused = _instances.Any(x => x.State == InstanceState.Paused);
             bool anyActive = _instances.Any(x => x.State is InstanceState.Running or InstanceState.Waiting);
 
             if (!anyPaused && !anyActive)
-                return; // 멈춰있거나 완료/에러만 있으면 할 일 없음
+                return;
 
             if (anyPaused)
             {
-                // Resume All: Paused만 Resume
                 foreach (var inst in _instances)
                 {
                     if (inst.State == InstanceState.Paused)
@@ -566,7 +590,6 @@ namespace ModbusTester
             }
             else
             {
-                // Pause All: Running/Waiting만 Pause
                 foreach (var inst in _instances)
                 {
                     if (inst.State is InstanceState.Running or InstanceState.Waiting)
@@ -577,27 +600,23 @@ namespace ModbusTester
             RefreshAllInstancesGridRows();
             UpdateRuntimeStatusText();
 
-            // 기존 버튼(선택 Pause/Resume) 텍스트도 갱신
             UpdatePauseResumeButtonText();
-
-            // Pause All 버튼 텍스트도 갱신
             UpdatePauseAllButtonText();
         }
 
         private void UpdatePauseAllButtonText()
         {
-            // 하나라도 Paused가 있으면 Resume All, 아니면 Pause All
             bool anyPaused = _instances.Any(x => x.State == InstanceState.Paused);
             btnInstPauseAll.Text = anyPaused ? "Resume All" : "Pause All";
         }
 
-
-        private void BtnInstClearSel_Click(object? sender, EventArgs e)
+        // ====== NEW: 체크박스 기반 Clear ======
+        private void BtnInstClear_Click(object? sender, EventArgs e)
         {
-            var list = GetSelectedInstances();
-            if (list.Count == 0) return;
+            var checkedList = GetCheckedInstances();
+            if (checkedList.Count == 0) return;
 
-            foreach (var inst in list)
+            foreach (var inst in checkedList)
             {
                 if (inst.State is InstanceState.Completed or InstanceState.Stopped or InstanceState.Error)
                     _instances.Remove(inst);
@@ -606,14 +625,7 @@ namespace ModbusTester
             RebuildInstancesGrid();
             UpdateRuntimeStatusText();
             UpdatePauseResumeButtonText();
-        }
-
-        private void BtnInstClearDone_Click(object? sender, EventArgs e)
-        {
-            _instances.RemoveAll(x => x.State is InstanceState.Completed or InstanceState.Stopped or InstanceState.Error);
-            RebuildInstancesGrid();
-            UpdateRuntimeStatusText();
-            UpdatePauseResumeButtonText();
+            UpdatePauseAllButtonText();
         }
 
         private void BtnInstClearAll_Click(object? sender, EventArgs e)
@@ -622,6 +634,7 @@ namespace ModbusTester
             RebuildInstancesGrid();
             UpdateRuntimeStatusText();
             UpdatePauseResumeButtonText();
+            UpdatePauseAllButtonText();
         }
 
         private void RebuildInstancesGrid()
@@ -658,8 +671,7 @@ namespace ModbusTester
                     due.CompleteIfDone();
                     RefreshInstanceGridRow(due);
                     UpdateRuntimeStatusText();
-                    UpdatePauseResumeButtonText(); 
-
+                    UpdatePauseResumeButtonText();
                     return;
                 }
 
@@ -670,7 +682,7 @@ namespace ModbusTester
                     due.Fail(err);
                     RefreshInstanceGridRow(due);
                     UpdateRuntimeStatusText();
-                    UpdatePauseResumeButtonText(); 
+                    UpdatePauseResumeButtonText();
 
                     MessageBox.Show(this, err, "Macro Run",
                         MessageBoxButtons.OK, MessageBoxIcon.Error);
@@ -680,7 +692,7 @@ namespace ModbusTester
                 due.OnStepSuccess(step.DelayMs);
                 RefreshInstanceGridRow(due);
                 UpdateRuntimeStatusText();
-                UpdatePauseResumeButtonText(); 
+                UpdatePauseResumeButtonText();
             }
             finally
             {
@@ -705,6 +717,7 @@ namespace ModbusTester
         private void AddInstanceRow(MacroInstance inst)
         {
             int r = dgvInstances.Rows.Add(
+                false,                    // 체크박스
                 inst.Id.ToString(),
                 inst.DisplayName,
                 inst.State.ToString(),
@@ -722,6 +735,36 @@ namespace ModbusTester
             foreach (DataGridViewRow row in dgvInstances.SelectedRows)
             {
                 if (row.Tag is MacroInstance inst)
+                    list.Add(inst);
+            }
+            return list;
+        }
+        private List<MacroInstance> GetTargetInstancesPreferChecked()
+        {
+            var checkedList = GetCheckedInstances();
+            if (checkedList.Count > 0)
+                return checkedList;
+
+            return GetSelectedInstances();
+        }
+
+
+        private List<MacroInstance> GetCheckedInstances()
+        {
+            var list = new List<MacroInstance>();
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                if (row.Tag is not MacroInstance inst)
+                    continue;
+
+                bool isChecked = false;
+                try
+                {
+                    isChecked = Convert.ToBoolean(row.Cells[COL_CHK].Value);
+                }
+                catch { isChecked = false; }
+
+                if (isChecked)
                     list.Add(inst);
             }
             return list;
@@ -760,13 +803,14 @@ namespace ModbusTester
 
         private void ApplyInstanceToRow(DataGridViewRow row, MacroInstance inst)
         {
-            row.Cells[0].Value = inst.Id.ToString();
-            row.Cells[1].Value = inst.DisplayName;
-            row.Cells[2].Value = inst.State.ToString();
-            row.Cells[3].Value = inst.RepeatText;
-            row.Cells[4].Value = inst.StepText;
-            row.Cells[5].Value = inst.NextText;
-            row.Cells[6].Value = inst.LastResult;
+            // 체크박스는 사용자가 컨트롤하므로 건드리지 않음
+            row.Cells[COL_ID].Value = inst.Id.ToString();
+            row.Cells[COL_MACRO].Value = inst.DisplayName;
+            row.Cells[COL_STATUS].Value = inst.State.ToString();
+            row.Cells[COL_REPEAT].Value = inst.RepeatText;
+            row.Cells[COL_STEP].Value = inst.StepText;
+            row.Cells[COL_NEXT].Value = inst.NextText;
+            row.Cells[COL_LAST].Value = inst.LastResult;
         }
 
         private void UpdateRuntimeStatusText()
@@ -789,6 +833,32 @@ namespace ModbusTester
         private void UpdateTitleDirtyMark()
         {
             Text = _dirty ? "Macro Setting *" : "Macro Setting";
+        }
+
+        private void DgvInstances_ColumnHeaderMouseClick(object? sender, DataGridViewCellMouseEventArgs e)
+        {
+            if (e.ColumnIndex != COL_CHK)
+                return;
+
+            bool anyRow = dgvInstances.Rows.Count > 0;
+            if (!anyRow) return;
+
+            bool allChecked = true;
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                bool v = false;
+                try { v = Convert.ToBoolean(row.Cells[COL_CHK].Value); } catch { v = false; }
+                if (!v)
+                {
+                    allChecked = false;
+                    break;
+                }
+            }
+
+            bool target = !allChecked;
+
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+                row.Cells[COL_CHK].Value = target;
         }
 
         private static MacroDefinition Clone(MacroDefinition src)

@@ -51,6 +51,10 @@ namespace ModbusTester
         // Right - Bottom
         private GroupBox grpRuntime;
         private DataGridView dgvInstances;
+
+        // ★ NEW: 체크박스 컬럼
+        private DataGridViewCheckBoxColumn colInstChk;
+
         private DataGridViewTextBoxColumn colInstId;
         private DataGridViewTextBoxColumn colInstMacro;
         private DataGridViewTextBoxColumn colInstStatus;
@@ -67,10 +71,12 @@ namespace ModbusTester
         private Button btnInstStart;
         private Button btnInstStop;
         private Button btnInstPauseResume;
-        private Button btnInstPauseAll;   // ★ 추가
-        private Button btnInstClearSel;
-        private Button btnInstClearDone;
+        private Button btnInstPauseAll;
         private Button btnInstStopAll;
+
+        // 기존 Clear Select / Clear Done 제거 → Clear 하나로 통합
+        private Button btnInstClear;
+
         private Button btnInstClearAll;
 
         protected override void Dispose(bool disposing)
@@ -106,6 +112,10 @@ namespace ModbusTester
 
             grpRuntime = new GroupBox();
             dgvInstances = new DataGridView();
+
+            // ★ NEW: checkbox column
+            colInstChk = new DataGridViewCheckBoxColumn();
+
             colInstId = new DataGridViewTextBoxColumn();
             colInstMacro = new DataGridViewTextBoxColumn();
             colInstStatus = new DataGridViewTextBoxColumn();
@@ -119,10 +129,9 @@ namespace ModbusTester
             btnInstStart = new Button();
             btnInstStop = new Button();
             btnInstPauseResume = new Button();
-            btnInstPauseAll = new Button(); // ★ 추가
-            btnInstClearSel = new Button();
-            btnInstClearDone = new Button();
+            btnInstPauseAll = new Button();
             btnInstStopAll = new Button();
+            btnInstClear = new Button();
             btnInstClearAll = new Button();
 
             grpMacroInfo = new GroupBox();
@@ -500,7 +509,14 @@ namespace ModbusTester
             dgvInstances.AllowUserToResizeRows = false;
             dgvInstances.ColumnHeadersHeight = 32;
             dgvInstances.ColumnHeadersHeightSizeMode = DataGridViewColumnHeadersHeightSizeMode.DisableResizing;
-            dgvInstances.Columns.AddRange(new DataGridViewColumn[] { colInstId, colInstMacro, colInstStatus, colInstRepeat, colInstStep, colInstNext, colInstLast });
+
+            // ★ 체크박스 컬럼이 맨 앞에 들어감
+            dgvInstances.Columns.AddRange(new DataGridViewColumn[]
+            {
+                colInstChk,
+                colInstId, colInstMacro, colInstStatus, colInstRepeat, colInstStep, colInstNext, colInstLast
+            });
+
             dgvInstances.Dock = DockStyle.Fill;
             dgvInstances.Location = new Point(10, 28);
             dgvInstances.Name = "dgvInstances";
@@ -508,6 +524,14 @@ namespace ModbusTester
             dgvInstances.SelectionMode = DataGridViewSelectionMode.FullRowSelect;
             dgvInstances.Size = new Size(717, 176);
             dgvInstances.TabIndex = 0;
+
+            // 
+            // colInstChk
+            // 
+            colInstChk.HeaderText = "";
+            colInstChk.Name = "colInstChk";
+            colInstChk.Width = 36;
+            colInstChk.Resizable = DataGridViewTriState.False;
 
             // 
             // colInstId
@@ -584,28 +608,19 @@ namespace ModbusTester
             pnlRuntimeButtons.TabIndex = 1;
 
             // 
-            // tlpRuntimeButtons 8 columns (Pause All 추가)
-            // ★ 최소 수정: ColumnStyles 비율만 조정해서 "Clear Select / Clear Done"이 안 잘리게 함
+            // tlpRuntimeButtons (7 columns)
+            // Start / Stop / Pause / Pause All / Stop All / Clear / Clear All
             // 
-            tlpRuntimeButtons.ColumnCount = 8;
+            tlpRuntimeButtons.ColumnCount = 7;
             tlpRuntimeButtons.ColumnStyles.Clear();
 
-            // 0 Start (짧음)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
-            // 1 Stop (짧음)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
-            // 2 Pause (짧음)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 10F));
-            // 3 Clear Select (길음)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
-            // 4 Clear Done (길음)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F));
-            // 5 Pause All (중간)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 14F));
-            // 6 Stop All (중간)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
-            // 7 Clear All (중간)
-            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F));
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Start
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Stop
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 12F)); // Pause
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F)); // Pause All
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F)); // Stop All
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F)); // Clear
+            tlpRuntimeButtons.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 16F)); // Clear All
 
             tlpRuntimeButtons.Dock = DockStyle.Fill;
             tlpRuntimeButtons.Location = new Point(0, 0);
@@ -653,31 +668,7 @@ namespace ModbusTester
             btnInstPauseResume.UseVisualStyleBackColor = true;
 
             // 
-            // btnInstClearSel
-            // 
-            btnInstClearSel.Dock = DockStyle.Fill;
-            btnInstClearSel.Location = new Point(356, 8);
-            btnInstClearSel.Margin = new Padding(0, 0, 6, 0);
-            btnInstClearSel.Name = "btnInstClearSel";
-            btnInstClearSel.Size = new Size(83, 28);
-            btnInstClearSel.TabIndex = 4;
-            btnInstClearSel.Text = "Clear Select";
-            btnInstClearSel.UseVisualStyleBackColor = true;
-
-            // 
-            // btnInstClearDone
-            // 
-            btnInstClearDone.Dock = DockStyle.Fill;
-            btnInstClearDone.Location = new Point(445, 8);
-            btnInstClearDone.Margin = new Padding(0, 0, 6, 0);
-            btnInstClearDone.Name = "btnInstClearDone";
-            btnInstClearDone.Size = new Size(83, 28);
-            btnInstClearDone.TabIndex = 5;
-            btnInstClearDone.Text = "Clear Done";
-            btnInstClearDone.UseVisualStyleBackColor = true;
-
-            // 
-            // btnInstPauseAll 
+            // btnInstPauseAll
             // 
             btnInstPauseAll.Dock = DockStyle.Fill;
             btnInstPauseAll.Location = new Point(267, 8);
@@ -692,35 +683,46 @@ namespace ModbusTester
             // btnInstStopAll
             // 
             btnInstStopAll.Dock = DockStyle.Fill;
-            btnInstStopAll.Location = new Point(534, 8);
+            btnInstStopAll.Location = new Point(356, 8);
             btnInstStopAll.Margin = new Padding(0, 0, 6, 0);
             btnInstStopAll.Name = "btnInstStopAll";
             btnInstStopAll.Size = new Size(83, 28);
-            btnInstStopAll.TabIndex = 6;
+            btnInstStopAll.TabIndex = 4;
             btnInstStopAll.Text = "Stop All";
             btnInstStopAll.UseVisualStyleBackColor = true;
+
+            // 
+            // btnInstClear
+            // 
+            btnInstClear.Dock = DockStyle.Fill;
+            btnInstClear.Location = new Point(445, 8);
+            btnInstClear.Margin = new Padding(0, 0, 6, 0);
+            btnInstClear.Name = "btnInstClear";
+            btnInstClear.Size = new Size(83, 28);
+            btnInstClear.TabIndex = 5;
+            btnInstClear.Text = "Clear";
+            btnInstClear.UseVisualStyleBackColor = true;
 
             // 
             // btnInstClearAll
             // 
             btnInstClearAll.Dock = DockStyle.Fill;
-            btnInstClearAll.Location = new Point(623, 8);
+            btnInstClearAll.Location = new Point(534, 8);
             btnInstClearAll.Margin = new Padding(0);
             btnInstClearAll.Name = "btnInstClearAll";
             btnInstClearAll.Size = new Size(94, 28);
-            btnInstClearAll.TabIndex = 7;
+            btnInstClearAll.TabIndex = 6;
             btnInstClearAll.Text = "Clear All";
             btnInstClearAll.UseVisualStyleBackColor = true;
 
-            // Controls Add (8개)
+            // Controls Add (7개)
             tlpRuntimeButtons.Controls.Add(btnInstStart, 0, 0);
             tlpRuntimeButtons.Controls.Add(btnInstStop, 1, 0);
             tlpRuntimeButtons.Controls.Add(btnInstPauseResume, 2, 0);
-            tlpRuntimeButtons.Controls.Add(btnInstClearSel, 3, 0);
-            tlpRuntimeButtons.Controls.Add(btnInstClearDone, 4, 0);
-            tlpRuntimeButtons.Controls.Add(btnInstPauseAll, 5, 0);
-            tlpRuntimeButtons.Controls.Add(btnInstStopAll, 6, 0);
-            tlpRuntimeButtons.Controls.Add(btnInstClearAll, 7, 0);
+            tlpRuntimeButtons.Controls.Add(btnInstClear, 3, 0);
+            tlpRuntimeButtons.Controls.Add(btnInstPauseAll, 4, 0);
+            tlpRuntimeButtons.Controls.Add(btnInstStopAll, 5, 0);
+            tlpRuntimeButtons.Controls.Add(btnInstClearAll, 6, 0);
 
             // 
             // FormMacroSetting

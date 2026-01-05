@@ -25,14 +25,25 @@ namespace ModbusTester
         private readonly ComboBox _cmbFontSize = new ComboBox();
         // ==========================================
 
+        // 세션 동안만 확대창 폰트사이즈 기억
+        private static readonly System.Collections.Generic.Dictionary<string, float> _lastFontSizeByKey
+            = new System.Collections.Generic.Dictionary<string, float>();
+
+        private string PrefKey => $"GridZoom:{_src?.Name}:{(_hideQvColumn ? "hideQV" : "showQV")}";
+
+        private float _pendingFontSize = -1f;
+
         public FormGridZoom(DataGridView source, Form owner, bool placeOnRight, bool hideQvColumn)
         {
             InitializeComponent();
 
+            // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
+            Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+
             _src = source ?? throw new ArgumentNullException(nameof(source));
             _hideQvColumn = hideQvColumn;
 
-            Text = $"Zoom - {source.Name}";
+            //Text = $"Zoom - {source.Name}";
             StartPosition = FormStartPosition.Manual;
 
             Size = new Size(520, 900);
@@ -56,6 +67,11 @@ namespace ModbusTester
 
             // 그리드 구조(컬럼 등) 1회 구성
             BuildColumnsFrom(_src);
+
+
+            // 기준값 캡처 끝난 뒤에 적용해야 스케일이 먹음
+            if (_pendingFontSize > 1f)
+                ApplyZoomFontSize(_pendingFontSize);
 
             // 최초 1회 동기화
             SyncAllRows();
@@ -114,22 +130,39 @@ namespace ModbusTester
         "10", "11", "12", "13", "14", "15", "16", "18", "20", "22", "24"
             });
 
-            var initial = (int)Math.Round(_src.Font.Size);
+            // 저장값 우선, 없으면 src.Font.Size
+            float initialFs = _src.Font.Size;
+            if (_lastFontSizeByKey.TryGetValue(PrefKey, out float savedFs) && savedFs > 1f)
+                initialFs = savedFs;
+
+            var initial = (int)Math.Round(initialFs);
             int idx = _cmbFontSize.Items.IndexOf(initial.ToString());
             if (idx < 0) idx = _cmbFontSize.Items.IndexOf("10");
             if (idx < 0) idx = 0;
+
             _cmbFontSize.SelectedIndex = idx;
+
+            // 여기서 ApplyZoomFontSize(initialFs) 호출하지 말고
+            // 나중에 적용 예약만
+            _pendingFontSize = initialFs;
+
+
+            // 콤보만 바뀌고 실제 적용이 안 될 수 있어서 여기서 한번 적용
+            ApplyZoomFontSize(initialFs);
 
             _cmbFontSize.SelectedIndexChanged += (_, __) =>
             {
                 if (float.TryParse(_cmbFontSize.SelectedItem?.ToString(), out float fs))
+                {
+                    _lastFontSizeByKey[PrefKey] = fs;   // 저장(세션)
                     ApplyZoomFontSize(fs);
+                }
             };
 
             rightBox.Controls.Add(lbl);
             rightBox.Controls.Add(_cmbFontSize);
 
-            // ✅ 구분선 1px (선택)
+            // 구분선 1px (선택)
             var line = new Panel();
             line.Dock = DockStyle.Bottom;
             line.Height = 1;

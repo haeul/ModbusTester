@@ -21,6 +21,8 @@ namespace ModbusTester
         {
             InitializeComponent();          // 디자이너에서 배치한 컨트롤들을 실제 폼에 올리는 부분
 
+            this.Text = $"ModbusTester-v{AppVersion.Get()}";
+
             // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용
             this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
 

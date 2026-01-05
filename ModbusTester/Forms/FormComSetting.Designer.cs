@@ -186,7 +186,7 @@
             ClientSize = new Size(284, 281);
             Controls.Add(grpCom);
             Name = "FormComSetting";
-            Text = "ModbusTester";
+            //Text = "ModbusTester-v1.0.0";
             grpCom.ResumeLayout(false);
             grpCom.PerformLayout();
             ResumeLayout(false);

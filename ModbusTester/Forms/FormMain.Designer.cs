@@ -757,7 +757,7 @@ namespace ModbusTester
             Font = new Font("Segoe UI", 10F);
             MinimumSize = new Size(1212, 690);
             Name = "FormMain";
-            Text = "Modbus Tester";
+            //Text = "ModbusTester-v1.0.0";
             Load += FormMain_Load;
             grpRx.ResumeLayout(false);
             grpRx.PerformLayout();

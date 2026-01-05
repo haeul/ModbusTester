@@ -83,7 +83,7 @@ namespace ModbusTester
 
             // Form
             AutoScaleMode = AutoScaleMode.Dpi;
-            Text = "Grid Zoom";
+            Text = "RX Grid Zoom";
             ClientSize = new System.Drawing.Size(560, 900);
             MinimumSize = new System.Drawing.Size(480, 600);
 

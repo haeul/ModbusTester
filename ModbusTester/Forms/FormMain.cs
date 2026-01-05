@@ -53,6 +53,9 @@ namespace ModbusTester
         public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
         {
             InitializeComponent();
+
+            this.Text = $"ModbusTester-v{AppVersion.Get()}";
+
             StartPosition = FormStartPosition.CenterScreen;
 
             // exe에 박혀 있는 아이콘을 그대로 폼 아이콘으로 사용

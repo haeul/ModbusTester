@@ -378,9 +378,7 @@ namespace ModbusTester.Core
                 if (row.IsNewRow) continue;
 
                 row.Cells[_colName].Value = "";
-                row.Cells[_colHex].Value = "";
-                row.Cells[_colDec].Value = "";
-                row.Cells[_colBit].Value = "";
+                ClearValueCells(row, respectReadOnly: false);
             }
 
             // “어떤 상황에서도 동기화” 원칙이면, TX를 비웠으면 RX Name도 따라가야 함
@@ -393,9 +391,7 @@ namespace ModbusTester.Core
             foreach (DataGridViewRow r in _gridTx.Rows)
             {
                 if (r.IsNewRow) continue;
-                r.Cells[_colHex].Value = "";
-                r.Cells[_colDec].Value = "";
-                r.Cells[_colBit].Value = "";
+                ClearValueCells(r, respectReadOnly: false);
             }
         }
 
@@ -405,9 +401,7 @@ namespace ModbusTester.Core
             foreach (DataGridViewRow r in _gridRx.Rows)
             {
                 if (r.IsNewRow) continue;
-                r.Cells[_colHex].Value = "";
-                r.Cells[_colDec].Value = "";
-                r.Cells[_colBit].Value = "";
+                ClearValueCells(r, respectReadOnly: false);
             }
         }
 
@@ -538,13 +532,22 @@ namespace ModbusTester.Core
             // 2) HEX/DEC/BIT 칸에서 Delete → 값 3칸만 지움 (Name은 건드리지 않음)
             if (colIndex == _colHex || colIndex == _colDec || colIndex == _colBit)
             {
-                if (!row.Cells[_colHex].ReadOnly) row.Cells[_colHex].Value = "";
-                if (!row.Cells[_colDec].ReadOnly) row.Cells[_colDec].Value = "";
-                if (!row.Cells[_colBit].ReadOnly) row.Cells[_colBit].Value = "";
-
+                ClearValueCells(row, respectReadOnly: false);
                 e.Handled = true;
                 return;
             }
+        }
+
+        private void ClearValueCells(DataGridViewRow row, bool respectReadOnly)
+        {
+            if (row == null || row.IsNewRow) return;
+
+            if (!respectReadOnly || !row.Cells[_colHex].ReadOnly)
+                row.Cells[_colHex].Value = "";
+            if (!respectReadOnly || !row.Cells[_colDec].ReadOnly)
+                row.Cells[_colDec].Value = "";
+            if (!respectReadOnly || !row.Cells[_colBit].ReadOnly)
+                row.Cells[_colBit].Value = "";
         }
 
         private void UpdateBitCell(DataGridViewRow row)

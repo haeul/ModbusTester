@@ -5,6 +5,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Windows.Forms;
+using System.Drawing;
 
 namespace ModbusTester
 {
@@ -646,6 +647,17 @@ namespace ModbusTester
 
         private void RuntimeTimer_Tick(object? sender, EventArgs e)
         {
+            // =======================
+            // [MIN FIX #1] Next 실시간 감소 표시 갱신
+            // - 기존에는 due 인스턴스만 Refresh 해서 Next 값이 고정되어 보였음
+            // - 매 Tick마다 화면에 찍힌 모든 인스턴스의 Next 셀만 갱신
+            // =======================
+            foreach (DataGridViewRow row in dgvInstances.Rows)
+            {
+                if (row.Tag is MacroInstance inst)
+                    row.Cells[COL_NEXT].Value = inst.NextText;
+            }
+
             if (_runtimeExecuting) return;
 
             var now = DateTime.Now;
@@ -664,6 +676,13 @@ namespace ModbusTester
 
                 due.MarkExecuting();
                 RefreshInstanceGridRow(due);
+
+                // =======================
+                // [MIN FIX #2] Running 상태가 화면에 실제로 보이도록 강제 페인트
+                // - Running -> Waiting 전환이 너무 빠르면 UI가 Running을 그리기 전에 Waiting만 보임
+                // =======================
+                dgvInstances.Invalidate();
+                dgvInstances.Update();
 
                 var step = due.GetCurrentStep();
                 if (step == null)

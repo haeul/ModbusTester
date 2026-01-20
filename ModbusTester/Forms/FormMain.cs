@@ -47,7 +47,7 @@ namespace ModbusTester
 
         private PollingConfig? _pollingConfig;
 
-        // (추가) Preset 실행 분리 객체
+        // Preset 실행 분리 객체
         private PresetRunner? _presetRunner;
 
         private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
@@ -93,8 +93,8 @@ namespace ModbusTester
                 _master = new ModbusMasterService(_client);
                 _poller = new ModbusPoller(_client);
 
-                // ✅ (추가) PresetRunner 생성
-                // - Log/UpdateReceiveHeader/RegisterCache 갱신은 기존 FormMain 메서드를 그대로 콜백으로 넘김
+                // PresetRunner 생성
+                // Log/UpdateReceiveHeader/RegisterCache 갱신은 기존 FormMain 메서드를 그대로 콜백으로 넘김
                 _presetRunner = new PresetRunner(
                     _master,
                     _gridController,

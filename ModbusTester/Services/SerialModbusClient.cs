@@ -35,33 +35,61 @@ namespace ModbusTester.Services
                 _sp.DiscardInBuffer();
                 _sp.Write(request, 0, request.Length);
 
-                // 간단한 딜레이 후 1차 읽기
-                System.Threading.Thread.Sleep(30);
+                // 장비 응답은 전송 직후 바로 오기도 하고(빠른 장비),
+                // 분할되어 들어오기도 해서(USB-Serial/드라이버/OS),
+                // "짧은 지연 + 단발 Read" 방식은 프레임이 잘려 들어오기 쉽습니다.
+                //
+                // → 전체 타임아웃 범위 내에서,
+                //    (1) 들어오는 만큼 누적 수신
+                //    (2) 일정 시간(quiet) 동안 추가 바이트가 없으면 종료
+                //    방식으로 안정화합니다.
 
-                var buf = new byte[512];
+                var buf = new byte[2048];
                 int read = 0;
 
-                try
-                {
-                    read += _sp.Read(buf, 0, buf.Length);
-                }
-                catch (TimeoutException)
-                {
-                    // 타임아웃은 조용히 무시
-                }
+                int overallTimeoutMs = _sp.ReadTimeout > 0 ? _sp.ReadTimeout : 500;
+                const int quietTimeoutMs = 30;   // 추가 바이트가 안 들어오는 "조용한" 구간
+                const int pollSleepMs = 5;
 
-                // 남은 데이터 추가로 읽기
-                System.Threading.Thread.Sleep(30);
-                try
+                var sw = System.Diagnostics.Stopwatch.StartNew();
+                var quietSw = System.Diagnostics.Stopwatch.StartNew();
+
+                while (sw.ElapsedMilliseconds < overallTimeoutMs)
                 {
-                    if (_sp.BytesToRead > 0)
+                    int available = _sp.BytesToRead;
+
+                    if (available > 0)
                     {
-                        int remain = Math.Min(buf.Length - read, _sp.BytesToRead);
-                        read += _sp.Read(buf, read, remain);
+                        // 버퍼가 부족하면 확장
+                        if (read + available > buf.Length)
+                        {
+                            int newLen = Math.Max(buf.Length * 2, read + available);
+                            Array.Resize(ref buf, newLen);
+                        }
+
+                        int toRead = Math.Min(available, buf.Length - read);
+                        int n = _sp.Read(buf, read, toRead);
+                        if (n > 0)
+                        {
+                            read += n;
+                            quietSw.Restart(); // 바이트가 들어오면 quiet 타이머 초기화
+                        }
                     }
-                }
-                catch (TimeoutException)
-                {
+                    else
+                    {
+                        // 아직 아무 것도 못 받았으면 조금 기다리고 계속
+                        if (read == 0)
+                        {
+                            System.Threading.Thread.Sleep(pollSleepMs);
+                            continue;
+                        }
+
+                        // 이미 일부 받았고, quiet 구간이 지나면 프레임이 끝난 것으로 간주
+                        if (quietSw.ElapsedMilliseconds >= quietTimeoutMs)
+                            break;
+
+                        System.Threading.Thread.Sleep(pollSleepMs);
+                    }
                 }
 
                 var resp = new byte[read];

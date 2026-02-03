@@ -234,7 +234,7 @@ namespace ModbusTester
             }
         }
 
-        // ✅ (수정) Preset 실행은 PresetRunner로 위임
+        // Preset 실행은 PresetRunner로 위임
         public bool TryRunPresetByName(string presetName, out string error)
         {
             error = "";

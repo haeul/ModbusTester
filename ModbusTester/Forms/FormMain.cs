@@ -4,12 +4,14 @@ using ModbusTester.Modbus;
 using ModbusTester.Presets;
 using ModbusTester.Services;
 using ModbusTester.Utils;
+using NModbus;
 using System;
 using System.Drawing;
 using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Windows.Forms;
 using static ModbusTester.Utils.HexExtensions;
@@ -18,6 +20,18 @@ namespace ModbusTester
 {
     public partial class FormMain : Form
     {
+        // ===== TCP mode fields =====
+        private readonly bool _tcpMode;
+        private readonly TcpClient? _tcpClient;
+        private readonly IModbusMaster? _tcpMaster;
+        private readonly byte _tcpUnitId;
+
+        private bool _isOpen =>
+            !_slaveMode && (
+                (_sp != null && _sp.IsOpen)
+                || (_tcpMode && _tcpMaster != null)
+            );
+
         // 컬럼 인덱스
         private const int COL_REG = 0;
         private const int COL_NAME = 1;
@@ -50,9 +64,7 @@ namespace ModbusTester
         // Preset 실행 분리 객체
         private PresetRunner? _presetRunner;
 
-        private bool _isOpen => !_slaveMode && _sp != null && _sp.IsOpen;
-
-        public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId)
+        public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId, TcpClient? tcpClient = null, IModbusMaster? tcpMaster = null, bool tcpMode = false, byte tcpUnitId = 1)
         {
             InitializeComponent();
 
@@ -70,6 +82,13 @@ namespace ModbusTester
             _slave = slave;
             _slaveMode = slaveMode;
 
+            _tcpClient = tcpClient;
+            _tcpMaster = tcpMaster;
+            _tcpMode = tcpMode;
+            _tcpUnitId = tcpUnitId;
+
+            ApplyCommModeUiState();
+
             // Recording 디렉토리: 실행 폴더 하위의 Data
             string recDir = Path.Combine(Application.StartupPath, "Data");
             _recService = new RecordingService(recDir);
@@ -86,22 +105,36 @@ namespace ModbusTester
                 COL_BIT
             );
 
-            // Master 모드에서만 통신 객체 생성 (오프라인 UI 용도로 _sp == null 허용)
-            if (!_slaveMode && _sp != null)
+            // ===== Comm objects init (Master only) =====
+            if (!_slaveMode)
             {
-                _client = new SerialModbusClient(_sp);
-                _master = new ModbusMasterService(_client);
-                _poller = new ModbusPoller(_client);
+                IModbusMasterService? masterService = null;
 
-                // PresetRunner 생성
-                // Log/UpdateReceiveHeader/RegisterCache 갱신은 기존 FormMain 메서드를 그대로 콜백으로 넘김
-                _presetRunner = new PresetRunner(
-                    _master,
-                    _gridController,
-                    Log,
-                    UpdateReceiveHeader,
-                    (start, values) => RegisterCache.UpdateRange(start, values)
-                );
+                if (_tcpMode)
+                {
+                    if (_tcpMaster != null)
+                        masterService = new TcpModbusMasterService(_tcpMaster);
+                }
+                else
+                {
+                    if (_sp != null)
+                    {
+                        _client = new SerialModbusClient(_sp);
+                        _poller = new ModbusPoller(_client);          // RTU polling 유지
+                        masterService = new ModbusMasterService(_client);
+                    }
+                }
+
+                if (masterService != null)
+                {
+                    _presetRunner = new PresetRunner(
+                        masterService,
+                        _gridController,
+                        Log,
+                        UpdateReceiveHeader,
+                        (start, values) => RegisterCache.UpdateRange(start, values)
+                    );
+                }
             }
 
             Shown += FormMain_Shown;

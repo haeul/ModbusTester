@@ -89,9 +89,7 @@
             label13.Size = new Size(29, 15);
             label13.TabIndex = 0;
             label13.Text = "Port";
-            // 예시: FormComSetting.Designer.cs 안 라벨 초기화 부분
             label13.DoubleClick += lblPort_DoubleClick;
-
             // 
             // grpCom
             // 
@@ -186,7 +184,6 @@
             ClientSize = new Size(284, 281);
             Controls.Add(grpCom);
             Name = "FormComSetting";
-            //Text = "ModbusTester-v1.0.0";
             grpCom.ResumeLayout(false);
             grpCom.PerformLayout();
             ResumeLayout(false);

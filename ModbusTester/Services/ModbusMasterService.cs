@@ -9,7 +9,7 @@ namespace ModbusTester.Services
     /// - 프레임 구성: ModbusRtu
     /// - 실제 전송: SerialModbusClient
     /// </summary>
-    public class ModbusMasterService
+    public class ModbusMasterService : IModbusMasterService
     {
         private readonly SerialModbusClient _client;
 

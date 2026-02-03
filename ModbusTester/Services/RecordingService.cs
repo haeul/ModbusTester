@@ -4,6 +4,12 @@ using System.Text;
 
 namespace ModbusTester.Services
 {
+    public enum RecordingMode
+    {
+        Rtu,
+        Tcp
+    }
+
     /// <summary>
     /// 폴링 결과(레지스터 값)를 CSV 파일로 기록하는 서비스.
     /// - 통신 로그(TX/RX HEX)는 다루지 않는다. (FormMain의 txtLog/SaveLog에서 처리)
@@ -16,6 +22,8 @@ namespace ModbusTester.Services
         private bool _disposed;
 
         // 세션 메타데이터
+        private RecordingMode _mode;
+        private string _endpoint = "-";
         private byte _slave;
         private byte _functionCode;
         private ushort _startAddress;
@@ -25,10 +33,7 @@ namespace ModbusTester.Services
         private int _intervalSeconds;
         private DateTime _lastWriteTime;
 
-        /// <summary>현재 녹화 중인지 여부</summary>
         public bool IsRecording => _writer != null;
-
-        /// <summary>현재 기록 중인 파일 경로 (없으면 null)</summary>
         public string? CurrentFilePath { get; private set; }
 
         public RecordingService(string directory)
@@ -39,20 +44,15 @@ namespace ModbusTester.Services
 
         /// <summary>
         /// 새 Recording 세션 시작.
-        /// - 기존 파일이 열려 있으면 닫고 새 파일 생성.
-        /// - 헤더(메타 + 주소 라인)를 기록.
         /// </summary>
-        /// <param name="slave">슬레이브 ID</param>
-        /// <param name="functionCode">FC (03/04 예상)</param>
-        /// <param name="startAddress">시작 레지스터 주소</param>
-        /// <param name="registerCount">레지스터 개수</param>
-        /// <param name="intervalSeconds">몇 초마다 한 줄씩 기록할지 (RecordEvery)</param>
-        public void Start(byte slave, byte functionCode, ushort startAddress, ushort registerCount, int intervalSeconds)
+        public void Start(RecordingMode mode, string? endpoint, byte slave, byte functionCode, ushort startAddress, ushort registerCount, int intervalSeconds)
         {
-            Stop();  // 혹시 기존에 열려있으면 정리
+            Stop();
 
             Directory.CreateDirectory(_directory);
 
+            _mode = mode;
+            _endpoint = string.IsNullOrWhiteSpace(endpoint) ? "-" : endpoint.Trim();
             _slave = slave;
             _functionCode = functionCode;
             _startAddress = startAddress;
@@ -60,9 +60,18 @@ namespace ModbusTester.Services
             _intervalSeconds = Math.Max(1, intervalSeconds);
             _lastWriteTime = DateTime.MinValue;
 
+            // 모드별 하위 폴더 분리
+            string modeDir = Path.Combine(_directory, mode.ToString().ToUpperInvariant());
+            Directory.CreateDirectory(modeDir);
+
+            // 파일명에 endpoint를 넣되 안전하게 sanitize
+            string safeEndpoint = SanitizeFileName(_endpoint);
+            if (string.IsNullOrEmpty(safeEndpoint)) safeEndpoint = "endpoint";
+
             string path = Path.Combine(
-                _directory,
-                $"modbus_rec_{DateTime.Now:yyyyMMdd_HHmmss}.csv");
+                modeDir,
+                $"modbus_rec_{mode.ToString().ToLowerInvariant()}_{safeEndpoint}_{DateTime.Now:yyyyMMdd_HHmmss}.csv"
+            );
 
             _writer = new StreamWriter(path, append: false, Encoding.UTF8)
             {
@@ -74,12 +83,13 @@ namespace ModbusTester.Services
 
             // 메타 정보
             _writer.WriteLine($"# Recording Start: {now:yyyy-MM-dd HH:mm:ss}");
-            _writer.WriteLine($"# Slave={_slave}, FC=0x{_functionCode:X2}, Start=0x{_startAddress:X4}, Count={_registerCount}");
+            _writer.WriteLine($"# Mode={_mode}, Endpoint={_endpoint}");
+            _writer.WriteLine($"# Slave/Unit={_slave}, FC=0x{_functionCode:X2}, Start=0x{_startAddress:X4}, Count={_registerCount}");
 
             // 헤더 라인: timestamp,0000h,0001h,...
-            const int TimeWidth = 8; // "HH:mm:ss" 길이
+            const int TimeWidth = 8; // "HH:mm:ss"
             var header = new StringBuilder();
-            header.Append("time".PadRight(TimeWidth));   // 첫 컬럼 헤더
+            header.Append("time".PadRight(TimeWidth));
             for (int i = 0; i < _registerCount; i++)
             {
                 ushort addr = (ushort)(_startAddress + i);
@@ -89,12 +99,6 @@ namespace ModbusTester.Services
             _writer.WriteLine(header.ToString());
         }
 
-        /// <summary>
-        /// Polling 결과(레지스터 값)를 전달하면,
-        /// 마지막 기록 시점으로부터 intervalSeconds가 지났을 때만 한 줄 기록.
-        /// </summary>
-        /// <param name="now">현재 시간</param>
-        /// <param name="values">Poll 결과 레지스터 값 배열</param>
         public void AppendSnapshotIfDue(DateTime now, ushort[] values)
         {
             if (_writer == null) return;
@@ -110,11 +114,9 @@ namespace ModbusTester.Services
             int n = Math.Min(values.Length, _registerCount);
 
             const int TimeWidth = 8;   // HH:mm:ss
-            const int ValueWidth = 5;  // 앞에서 맞춰둔 값 폭
+            const int ValueWidth = 5;  // 값 폭
 
             var line = new StringBuilder();
-
-            // ── 시간만 짧게 찍기 ──
             line.Append(now.ToString("HH:mm:ss").PadRight(TimeWidth));
 
             for (int i = 0; i < _registerCount; i++)
@@ -135,9 +137,6 @@ namespace ModbusTester.Services
             _lastWriteTime = now;
         }
 
-        /// <summary>
-        /// 현재 Recording 세션 종료 (파일 닫기).
-        /// </summary>
         public void Stop()
         {
             if (_writer != null)
@@ -165,6 +164,26 @@ namespace ModbusTester.Services
             if (_disposed) return;
             _disposed = true;
             Stop();
+        }
+
+        private static string SanitizeFileName(string s)
+        {
+            var invalid = Path.GetInvalidFileNameChars();
+            var sb = new StringBuilder(s.Length);
+            foreach (char c in s)
+            {
+                if (invalid.Contains(c)) continue;
+
+                // 자주 문제되는 문자 추가 처리
+                if (c == ':' || c == '/' || c == '\\') { sb.Append('_'); continue; }
+
+                sb.Append(c);
+            }
+
+            // 너무 길면 자르기(윈도우 파일명 길이 안전)
+            string r = sb.ToString().Trim();
+            if (r.Length > 40) r = r.Substring(0, 40);
+            return r;
         }
     }
 }

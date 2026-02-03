@@ -15,7 +15,7 @@ namespace ModbusTester.Presets
     /// </summary>
     public sealed class PresetRunner
     {
-        private readonly ModbusMasterService _master;
+        private readonly IModbusMasterService _master;
         private readonly RegisterGridController _gridController;
 
         private readonly Action<string> _log;
@@ -23,7 +23,7 @@ namespace ModbusTester.Presets
         private readonly Action<ushort, ushort[]> _updateCache;
 
         public PresetRunner(
-            ModbusMasterService master,
+            IModbusMasterService master,
             RegisterGridController gridController,
             Action<string> log,
             Action<byte[], byte, byte, ushort, ushort> updateReceiveHeader,

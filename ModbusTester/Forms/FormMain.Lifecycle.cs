@@ -1,19 +1,46 @@
 ﻿using ModbusTester.Modbus;
 using ModbusTester.Utils;
+using NModbus;                 // TCP 분기에서 사용 (IModbusMaster)
 using System;
 using System.IO;
+using System.Net.Http;
+using System.Net.Sockets;       // TcpClient Dispose
 using System.Windows.Forms;
 
 namespace ModbusTester
 {
     public partial class FormMain
     {
+        private void ApplyCommModeUiState()
+        {
+            if (_tcpMode)
+            {
+                numSlave.Enabled = false;
+                numSlave.Value = _tcpUnitId;
+
+                lblTxSlaveAddress.Text = "Unit ID"; // Label 이름이 lblSlave라고 가정
+            }
+            else
+            {
+                numSlave.Enabled = true;
+
+                lblTxSlaveAddress.Text = "Slave ID";
+            }
+        }
+
         // ───────────────────── CRC 계산 버튼 ─────────────────────
 
         private void btnCalcCrc_Click(object sender, EventArgs e)
         {
             try
             {
+                // TCP 모드에서는 RTU CRC 자체가 의미 없음 (MBAP 헤더 사용)
+                if (_tcpMode)
+                {
+                    MessageBox.Show("Modbus TCP 모드에서는 CRC를 사용하지 않습니다.");
+                    return;
+                }
+
                 byte slave = (byte)numSlave.Value;
                 ushort start = (ushort)numStartRegister.Value;
                 ushort count = (ushort)numCount.Value;
@@ -69,14 +96,10 @@ namespace ModbusTester
                 MessageBox.Show("지금은 Slave 모드입니다. Master 모드에서 전송하세요.");
                 return;
             }
+
             if (!_isOpen)
             {
                 MessageBox.Show("먼저 포트를 OPEN 하세요.");
-                return;
-            }
-            if (_master == null)
-            {
-                MessageBox.Show("통신 클라이언트가 초기화되지 않았습니다.");
                 return;
             }
 
@@ -86,6 +109,74 @@ namespace ModbusTester
                 ushort start = (ushort)numStartRegister.Value;
                 ushort count = (ushort)numCount.Value;
                 byte fc = GetFunctionCode();
+
+                // ===== TCP Mode =====
+                if (_tcpMode)
+                {
+                    if (_tcpMaster == null)
+                    {
+                        MessageBox.Show("TCP Master가 초기화되지 않았습니다.");
+                        return;
+                    }
+
+                    byte unitId = _tcpUnitId != 0 ? _tcpUnitId : slave;
+
+                    if (fc == 0x03)
+                    {
+                        ushort[] values = _tcpMaster.ReadHoldingRegisters(unitId, start, count);
+
+                        Log($"TX: FC={fc:X2} (TCP) Unit={unitId}, Start=0x{start:X4}, Count={count}");
+                        Log($"RX: OK (TCP) DataCount={values.Length * 2}, Regs={values.Length}");
+
+                        UpdateReceiveHeaderTcp(unitId, fc, start, count, values.Length);
+                        _gridController.FillRxGrid(start, values);
+                        RegisterCache.UpdateRange(start, values);
+                    }
+                    else if (fc == 0x04)
+                    {
+                        ushort[] values = _tcpMaster.ReadInputRegisters(unitId, start, count);
+
+                        Log($"TX: FC={fc:X2} (TCP) Unit={unitId}, Start=0x{start:X4}, Count={count}");
+                        Log($"RX: OK (TCP) DataCount={values.Length * 2}, Regs={values.Length}");
+
+                        UpdateReceiveHeaderTcp(unitId, fc, start, count, values.Length);
+                        _gridController.FillRxGrid(start, values);
+                        RegisterCache.UpdateRange(start, values);
+                    }
+                    else if (fc == 0x06)
+                    {
+                        ushort val = _gridController.ReadTxValueOrZero(0);
+                        _tcpMaster.WriteSingleRegister(unitId, start, val);
+
+                        Log($"TX: FC=06 (TCP) Unit={unitId}, Addr=0x{start:X4}, Value=0x{val:X4}");
+                        Log("RX: OK (TCP)");
+                        UpdateReceiveHeaderTcp(unitId, fc, start, 1, 0);
+                        RegisterCache.UpdateRange(start, new ushort[] { val });
+                    }
+                    else if (fc == 0x10)
+                    {
+                        ushort[] vals = _gridController.ReadTxValues(count);
+                        _tcpMaster.WriteMultipleRegisters(unitId, start, vals);
+
+                        Log($"TX: FC=10 (TCP) Unit={unitId}, Start=0x{start:X4}, Count={vals.Length}, ByteCount={vals.Length * 2}");
+                        Log("RX: OK (TCP)");
+                        UpdateReceiveHeaderTcp(unitId, fc, start, (ushort)vals.Length, 0);
+                        RegisterCache.UpdateRange(start, vals);
+                    }
+                    else
+                    {
+                        throw new NotSupportedException("지원하지 않는 Function Code");
+                    }
+
+                    return;
+                }
+
+                // ===== RTU Mode (기존 로직 그대로) =====
+                if (_master == null)
+                {
+                    MessageBox.Show("통신 클라이언트가 초기화되지 않았습니다.");
+                    return;
+                }
 
                 if (fc == 0x03 || fc == 0x04)
                 {
@@ -130,6 +221,21 @@ namespace ModbusTester
             {
                 MessageBox.Show("전송 실패: " + ex.Message);
             }
+        }
+
+        private void UpdateReceiveHeaderTcp(byte unitId, byte fc, ushort start, ushort count, int valueCount)
+        {
+            txtRxSlave.Text = unitId.ToString();
+            txtRxFc.Text = $"{fc:X2}h";
+            txtRxStart.Text = $"{start:X4}h";
+            txtRxCount.Text = count.ToString();
+
+            if (fc == 0x03 || fc == 0x04)
+                txtRxDataCount.Text = (valueCount * 2).ToString();
+            else
+                txtRxDataCount.Text = "0";
+
+            txtRxCrc.Text = "";
         }
 
         // ───────────────────── TX/RX/Log 버튼들 ─────────────────────
@@ -194,6 +300,7 @@ namespace ModbusTester
             try { _recService.Dispose(); } catch { }
             try { _slave?.Dispose(); } catch { }
 
+            // RTU 포트 정리
             try
             {
                 if (_sp != null)
@@ -202,6 +309,17 @@ namespace ModbusTester
                         _sp.Close();
 
                     _sp.Dispose();
+                }
+            }
+            catch { }
+
+            // TCP 정리 (Main이 들고 있으면 여기서도 안전하게 정리)
+            try
+            {
+                if (_tcpClient != null)
+                {
+                    try { _tcpClient.Close(); } catch { }
+                    try { _tcpClient.Dispose(); } catch { }
                 }
             }
             catch { }

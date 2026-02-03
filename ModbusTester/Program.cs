@@ -1,5 +1,6 @@
 using System;
 using System.Windows.Forms;
+using ModbusTester.Forms;
 
 namespace ModbusTester
 {
@@ -11,7 +12,7 @@ namespace ModbusTester
             Application.EnableVisualStyles();
             Application.SetCompatibleTextRenderingDefault(false);
 
-            Application.Run(new FormComSetting());   
+            Application.Run(new FormStartMode());
         }
     }
 }

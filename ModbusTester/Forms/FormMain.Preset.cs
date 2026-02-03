@@ -169,15 +169,11 @@ namespace ModbusTester
             if (foundIndex >= 0)
                 cmbFunctionCode.SelectedIndex = foundIndex;
 
-            if (preset.StartAddress >= numStartRegister.Minimum &&
-                preset.StartAddress <= numStartRegister.Maximum)
-            {
-                numStartRegister.Value = preset.StartAddress;
-            }
-            else
-            {
-                numStartRegister.Value = numStartRegister.Minimum;
-            }
+            ushort gridStart = preset.TxGridStartAddress;
+            if (gridStart == 0 && preset.RxGridStartAddress != 0)
+                gridStart = preset.RxGridStartAddress;
+            if (gridStart == 0 && preset.StartAddress != 0)
+                gridStart = preset.StartAddress;
 
             if (preset.RegisterCount >= numCount.Minimum &&
                 preset.RegisterCount <= numCount.Maximum)
@@ -189,9 +185,8 @@ namespace ModbusTester
                 numCount.Value = numCount.Minimum;
             }
 
-            // Grid 시작 주소 복원
-            _gridController.SetTxStartAddress(preset.TxGridStartAddress);
-            _gridController.SetRxStartAddress(preset.RxGridStartAddress);
+            // Grid 시작 주소 복원 (TX/RX 동기화 포함)
+            _gridController.SetStartAddressBoth(gridStart);
 
             _gridController.ClearTxAll();     // (이 안에서 TX->RX Name 1회 동기화도 수행)
             ApplyPresetTxRows(preset);        // 프리셋 복원 (마지막에 다시 1회 전체 동기화)

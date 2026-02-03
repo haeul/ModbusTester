@@ -50,11 +50,11 @@ namespace ModbusTester.Core
         private const ushort RegisterMax = 0xFFFF;
         private const ushort GridRegisterMax = 0x03FF;
 
-        // ✅ 현재 그리드가 표시 중인 시작 주소 (Preset 저장/로드에 필요)
+        // 현재 그리드가 표시 중인 시작 주소 (Preset 저장/로드에 필요)
         public ushort TxStartAddress { get; private set; } = RegisterMin;
         public ushort RxStartAddress { get; private set; } = RegisterMin;
 
-        // ✅ numStartRegister.Value를 내부에서 세팅할 때 ValueChanged 재진입 방지
+        // numStartRegister.Value를 내부에서 세팅할 때 ValueChanged 재진입 방지
         private bool _suppressNumStartSync = false;
         public bool IsSuppressingStartSync => _suppressNumStartSync;
 
@@ -149,7 +149,7 @@ namespace ModbusTester.Core
                         await Task.Yield();
                 }
 
-                // ✅ 초기화 후 현재 StartRegister 기준으로 TX/RX 모두 정렬
+                // 초기화 후 현재 StartRegister 기준으로 TX/RX 모두 정렬
                 ushort start = (ushort)_numStartRegister.Value;
                 SetStartAddressBoth(start);
             }
@@ -160,7 +160,7 @@ namespace ModbusTester.Core
             }
         }
 
-        // ✅ (요청 3) Start Register → Grid 시작 레지스터 반영
+        // (요청 3) Start Register → Grid 시작 레지스터 반영
         public void SetTxStartAddress(ushort start)
         {
             TxStartAddress = NormalizeStart(start);
@@ -562,7 +562,7 @@ namespace ModbusTester.Core
         // ───────── 내부 Helper (그리드 전용) ─────────
         public void HandleGridDeleteKey(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode != Keys.Delete) return;
+            if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back) return;
 
             var g = sender as DataGridView;
             if (g == null) return;
@@ -580,7 +580,17 @@ namespace ModbusTester.Core
             var row = g.Rows[rowIndex];
             if (row.IsNewRow) return;
 
-            // 1) Name 칸에서 Delete → Name만 지움
+            // 1) Register 칸에서 Delete/Backspace → Register만 지움 (첫 행만)
+            if (colIndex == _colReg)
+            {
+                if (rowIndex == 0 && !row.Cells[_colReg].ReadOnly)
+                    row.Cells[_colReg].Value = "";
+
+                e.Handled = true;
+                return;
+            }
+
+            // 2) Name 칸에서 Delete → Name만 지움
             if (colIndex == _colName)
             {
                 if (!row.Cells[_colName].ReadOnly)
@@ -594,7 +604,7 @@ namespace ModbusTester.Core
                 return;
             }
 
-            // 2) HEX/DEC/BIT 칸에서 Delete → 값 3칸만 지움 (Name은 건드리지 않음)
+            // 3) HEX/DEC/BIT 칸에서 Delete → 값 3칸만 지움 (Name은 건드리지 않음)
             if (colIndex == _colHex || colIndex == _colDec || colIndex == _colBit)
             {
                 ClearValueCells(row, respectReadOnly: false);
@@ -691,7 +701,7 @@ namespace ModbusTester.Core
                 row.Cells[_colReg].Value = $"{addr:X4}h";
             }
 
-            // ✅ 현재 표시 시작 주소 상태 업데이트 + numStartRegister 동기화
+            // 현재 표시 시작 주소 상태 업데이트 + numStartRegister 동기화
             if (ReferenceEquals(grid, _gridTx))
             {
                 TxStartAddress = numericStart;
@@ -705,6 +715,9 @@ namespace ModbusTester.Core
                 {
                     _suppressNumStartSync = false;
                 }
+
+                // TX 시작 주소 변경 시 RX도 동기화
+                SetRxStartAddress(numericStart);
             }
             else if (ReferenceEquals(grid, _gridRx))
             {

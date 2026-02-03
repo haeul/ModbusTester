@@ -88,6 +88,7 @@ namespace ModbusTester
 
             var nameRows = new HashSet<int>();
             var valueRows = new HashSet<int>();
+            var registerRows = new HashSet<int>();
 
             foreach (DataGridViewCell cell in gridTx.SelectedCells)
             {
@@ -101,6 +102,10 @@ namespace ModbusTester
                 else if (cell.ColumnIndex == COL_HEX || cell.ColumnIndex == COL_DEC || cell.ColumnIndex == COL_BIT)
                 {
                     valueRows.Add(cell.RowIndex);
+                }
+                else if (cell.ColumnIndex == COL_REG)
+                {
+                    registerRows.Add(cell.RowIndex);
                 }
             }
 
@@ -126,6 +131,16 @@ namespace ModbusTester
 
                 // 프로그램적으로 바꾼 경우/편집 상태에 따라 CellValueChanged가 애매하게 안 뜨는 케이스 방지
                 _gridController.SyncTxNameToRxByRowIndex(r);
+            }
+
+            foreach (int r in registerRows)
+            {
+                if (r != 0) continue;
+                if (r < 0 || r >= gridTx.Rows.Count) continue;
+                var row = gridTx.Rows[r];
+                if (row.IsNewRow) continue;
+
+                row.Cells[COL_REG].Value = "";
             }
 
             if (gridTx.IsCurrentCellInEditMode)

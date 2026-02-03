@@ -197,6 +197,9 @@ namespace ModbusTester
             gridTx.CurrentCellDirtyStateChanged -= GridTx_CurrentCellDirtyStateChanged;
             gridTx.CurrentCellDirtyStateChanged += GridTx_CurrentCellDirtyStateChanged;
 
+            numStartRegister.ValueChanged -= numStartRegister_ValueChanged;
+            numStartRegister.ValueChanged += numStartRegister_ValueChanged;
+
             // 아래 두 이벤트는 디자이너에서 이미 연결되어 있을 수 있음
             // (중복 호출 방지 위해 -= 후 += 형태로 안정 결합)
             gridTx.CellBeginEdit -= Grid_CellBeginEdit;
@@ -245,6 +248,15 @@ namespace ModbusTester
             Log(slave
                 ? "[MODE] Slave 모드 (해당 포트로 들어오는 요청에 응답)"
                 : "[MODE] Master 모드 (요청을 전송)");
+        }
+
+        private void numStartRegister_ValueChanged(object sender, EventArgs e)
+        {
+            if (_gridController.IsSuppressingStartSync)
+                return;
+
+            ushort start = (ushort)numStartRegister.Value;
+            _gridController.SetStartAddressBoth(start);
         }
 
         private void chkSlaveMode_CheckedChanged(object sender, EventArgs e)

@@ -1,13 +1,23 @@
-﻿using System;
+﻿using ModbusTester.Utils;
+using System;
 using System.Windows.Forms;
 
 namespace ModbusTester.Forms
 {
     public partial class FormStartMode : Form
     {
+        private readonly LayoutScaler _layoutScaler;
+
         public FormStartMode()
         {
             InitializeComponent();
+
+            this.Text = $"ModbusTester-v{AppVersion.Get()}";
+            this.Icon = Icon.ExtractAssociatedIcon(Application.ExecutablePath);
+
+            _layoutScaler = new LayoutScaler(this);
+            _layoutScaler.ApplyInitialScale(1.3f);
+
             StartPosition = FormStartPosition.CenterScreen;
 
             btnNext.Click += BtnNext_Click;

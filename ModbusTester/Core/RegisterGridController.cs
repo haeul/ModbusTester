@@ -50,7 +50,7 @@ namespace ModbusTester.Core
         private const ushort RegisterMax = 0xFFFF;
         private const ushort GridRegisterMax = 0x03FF;
 
-        // 현재 그리드가 표시 중인 시작 주소 (Preset 저장/로드에 필요)
+        // 현재 그리드가 표시 중인 시작 주소
         public ushort TxStartAddress { get; private set; } = RegisterMin;
         public ushort RxStartAddress { get; private set; } = RegisterMin;
 
@@ -160,7 +160,7 @@ namespace ModbusTester.Core
             }
         }
 
-        // (요청 3) Start Register → Grid 시작 레지스터 반영
+        // Start Register → Grid 시작 레지스터 반영
         public void SetTxStartAddress(ushort start)
         {
             TxStartAddress = NormalizeStart(start);
@@ -568,7 +568,7 @@ namespace ModbusTester.Core
             if (g == null) return;
 
             // 사용자가 실제로 편집 중이면(텍스트 박스 커서 들어간 상태) 기본 동작 존중
-            if (g.IsCurrentCellInEditMode) return;
+            if (g.IsCurrentCellInEditMode || g.EditingControl != null) return;
 
             var cell = g.CurrentCell;
             if (cell == null) return;

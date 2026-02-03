@@ -35,7 +35,7 @@ namespace ModbusTester
             int savedUnit = Properties.Settings.Default.TcpUnitId;
 
             if (!string.IsNullOrWhiteSpace(savedHost)) txtHost.Text = savedHost;
-            else txtHost.Text = "192.168.1.01";
+            else txtHost.Text = "192.168.1.31";
 
             if (savedPort >= 1 && savedPort <= 65535) numPort.Value = savedPort;
             else numPort.Value = 13000;

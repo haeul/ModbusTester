@@ -50,6 +50,12 @@ namespace ModbusTester
             if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
                 return;
 
+            if (gridTx.IsCurrentCellInEditMode || gridTx.EditingControl != null)
+                return;
+
+            if (gridTx.SelectedCells == null || gridTx.SelectedCells.Count <= 1)
+                return;
+
             ClearSelectedTxCells();
 
             e.Handled = true;
@@ -67,13 +73,8 @@ namespace ModbusTester
 
         private void GridTx_EditingTextBox_KeyDown(object sender, KeyEventArgs e)
         {
-            if (e.KeyCode != Keys.Delete && e.KeyCode != Keys.Back)
+            if (gridTx.IsCurrentCellInEditMode || gridTx.EditingControl != null)
                 return;
-
-            ClearSelectedTxCells();
-
-            e.Handled = true;
-            e.SuppressKeyPress = true;
         }
 
         /// <summary>

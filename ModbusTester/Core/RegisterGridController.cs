@@ -18,6 +18,10 @@ namespace ModbusTester.Core
     /// - TX/RX 값 클리어, Copy 기능
     /// - TX 값 읽기(ReadTxValues / ReadTxValueOrZero)
     /// - TX Name → RX Name 동기화 (이벤트 기반 + 전체 강제 동기화)
+    ///
+    /// [추가]
+    /// - Start Register 변경 시 TX/RX Grid Register 컬럼 재정렬
+    /// - Preset 저장/로드용 TxStartAddress / RxStartAddress 제공
     /// </summary>
     public class RegisterGridController
     {
@@ -45,6 +49,14 @@ namespace ModbusTester.Core
         private const ushort RegisterMin = 0x0000;
         private const ushort RegisterMax = 0xFFFF;
         private const ushort GridRegisterMax = 0x03FF;
+
+        // ✅ 현재 그리드가 표시 중인 시작 주소 (Preset 저장/로드에 필요)
+        public ushort TxStartAddress { get; private set; } = RegisterMin;
+        public ushort RxStartAddress { get; private set; } = RegisterMin;
+
+        // ✅ numStartRegister.Value를 내부에서 세팅할 때 ValueChanged 재진입 방지
+        private bool _suppressNumStartSync = false;
+        public bool IsSuppressingStartSync => _suppressNumStartSync;
 
         public RegisterGridController(
             DataGridView gridTx,
@@ -136,12 +148,65 @@ namespace ModbusTester.Core
                     if (counter % chunk == 0)
                         await Task.Yield();
                 }
+
+                // ✅ 초기화 후 현재 StartRegister 기준으로 TX/RX 모두 정렬
+                ushort start = (ushort)_numStartRegister.Value;
+                SetStartAddressBoth(start);
             }
             finally
             {
                 _gridTx.ResumeLayout();
                 _gridRx.ResumeLayout();
             }
+        }
+
+        // ✅ (요청 3) Start Register → Grid 시작 레지스터 반영
+        public void SetTxStartAddress(ushort start)
+        {
+            TxStartAddress = NormalizeStart(start);
+
+            // numStartRegister를 내부에서 맞출 때 재진입 방지
+            _suppressNumStartSync = true;
+            try
+            {
+                ApplyStartToGrid(_gridTx, TxStartAddress);
+                _numStartRegister.Value = TxStartAddress;
+            }
+            finally
+            {
+                _suppressNumStartSync = false;
+            }
+        }
+
+        public void SetRxStartAddress(ushort start)
+        {
+            RxStartAddress = NormalizeStart(start);
+            ApplyStartToGrid(_gridRx, RxStartAddress);
+        }
+
+        public void SetStartAddressBoth(ushort start)
+        {
+            // TX 먼저 적용(= numStartRegister 동기화 포함) 후 RX 적용
+            SetTxStartAddress(start);
+            SetRxStartAddress(start);
+        }
+
+        private static ushort NormalizeStart(ushort start)
+        {
+            // 현재 그리드는 1024행 고정이지만, 표시 주소는 0x0000~0xFFFF 모두 가능
+            // 필요하면 정책에 따라 제한 가능(예: start <= 0xFFFF)
+            return start;
+        }
+
+        private void ApplyStartToGrid(DataGridView grid, ushort start)
+        {
+            if (grid.Rows.Count == 0) return;
+
+            // 첫 행 Register를 start로 세팅하고 나머지 재배열
+            grid.Rows[0].Cells[_colReg].Value = $"{start:X4}h";
+
+            // 기존 로직 재사용(파싱/증가/랩어라운드 포함)
+            RebuildRegisterColumnFromFirstRow(grid);
         }
 
         // Register 컬럼: 첫 줄만 편집 허용
@@ -626,9 +691,24 @@ namespace ModbusTester.Core
                 row.Cells[_colReg].Value = $"{addr:X4}h";
             }
 
+            // ✅ 현재 표시 시작 주소 상태 업데이트 + numStartRegister 동기화
             if (ReferenceEquals(grid, _gridTx))
             {
-                _numStartRegister.Value = numericStart;
+                TxStartAddress = numericStart;
+
+                _suppressNumStartSync = true;
+                try
+                {
+                    _numStartRegister.Value = numericStart;
+                }
+                finally
+                {
+                    _suppressNumStartSync = false;
+                }
+            }
+            else if (ReferenceEquals(grid, _gridRx))
+            {
+                RxStartAddress = numericStart;
             }
         }
 

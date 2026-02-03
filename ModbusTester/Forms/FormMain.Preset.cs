@@ -130,6 +130,10 @@ namespace ModbusTester
                     FunctionCode = fc,
                     StartAddress = startAddr,
                     RegisterCount = regCount,
+
+                    TxGridStartAddress = _gridController.TxStartAddress, 
+                    RxGridStartAddress = _gridController.RxStartAddress, 
+
                     TxRows = CaptureTxRows(startAddr, regCount)
                 };
             }
@@ -184,6 +188,10 @@ namespace ModbusTester
             {
                 numCount.Value = numCount.Minimum;
             }
+
+            // Grid 시작 주소 복원
+            _gridController.SetTxStartAddress(preset.TxGridStartAddress);
+            _gridController.SetRxStartAddress(preset.RxGridStartAddress);
 
             _gridController.ClearTxAll();     // (이 안에서 TX->RX Name 1회 동기화도 수행)
             ApplyPresetTxRows(preset);        // 프리셋 복원 (마지막에 다시 1회 전체 동기화)

@@ -17,6 +17,9 @@ namespace ModbusTester.Presets
         public byte FunctionCode { get; set; }
         public ushort StartAddress { get; set; }
         public ushort RegisterCount { get; set; }
+        public ushort TxGridStartAddress { get; set; }
+        public ushort RxGridStartAddress { get; set; }
+
 
         // 채워진 TX 행만 저장
         public List<TxRowPreset> TxRows { get; set; } = new List<TxRowPreset>();

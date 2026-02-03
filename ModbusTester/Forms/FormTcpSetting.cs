@@ -29,10 +29,19 @@ namespace ModbusTester
 
         private void FormTcpSetting_Load(object sender, EventArgs e)
         {
-            // 기본값
-            txtHost.Text = "192.168.1.31";
-            numPort.Value = 13000;
-            numUnitId.Value = 1;
+            // 저장된 값이 있으면 우선 사용
+            string savedHost = Properties.Settings.Default.TcpHost;
+            int savedPort = Properties.Settings.Default.TcpPort;
+            int savedUnit = Properties.Settings.Default.TcpUnitId;
+
+            if (!string.IsNullOrWhiteSpace(savedHost)) txtHost.Text = savedHost;
+            else txtHost.Text = "192.168.1.30";
+
+            if (savedPort >= 1 && savedPort <= 65535) numPort.Value = savedPort;
+            else numPort.Value = 13000;
+
+            if (savedUnit >= 1 && savedUnit <= 247) numUnitId.Value = savedUnit;
+            else numUnitId.Value = 1;
         }
 
         private TcpConfig BuildConfigFromUi()
@@ -146,6 +155,12 @@ namespace ModbusTester
                 };
 
                 client.Connect(cfg.Host, cfg.Port);
+
+                // 연결 성공 설정 저장
+                Properties.Settings.Default.TcpHost = cfg.Host;
+                Properties.Settings.Default.TcpPort = cfg.Port;
+                Properties.Settings.Default.TcpUnitId = cfg.UnitId;
+                Properties.Settings.Default.Save();
 
                 // 4) NModbus Master 생성
                 var factory = new ModbusFactory();

@@ -182,6 +182,9 @@ namespace ModbusTester
             gridTx.KeyDown -= GridTx_KeyDown;
             gridTx.KeyDown += GridTx_KeyDown;
 
+            gridTx.KeyDown -= Grid_DeleteKeyDown;
+            gridRx.KeyDown -= Grid_DeleteKeyDown;
+
             gridTx.KeyDown += Grid_DeleteKeyDown;
             gridRx.KeyDown += Grid_DeleteKeyDown;
 

@@ -168,6 +168,8 @@ namespace ModbusTester
                         throw new NotSupportedException("지원하지 않는 Function Code");
                     }
 
+                    // 성공 훅 (TCP)
+                    NotifyCommSuccess();
                     return;
                 }
 
@@ -216,9 +218,15 @@ namespace ModbusTester
                 {
                     throw new NotSupportedException("지원하지 않는 Function Code");
                 }
+
+                // 성공 훅 (RTU)
+                NotifyCommSuccess();
             }
             catch (Exception ex)
             {
+                // 실패 훅 (RTU/TCP 공통)
+                NotifyCommFailure(ex);
+
                 MessageBox.Show("전송 실패: " + ex.Message);
             }
         }

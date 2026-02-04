@@ -113,6 +113,9 @@ namespace ModbusTester
                     _gridController.FillRxGrid(start, values);
                     RegisterCache.UpdateRange(start, values);
                     _recService.AppendSnapshotIfDue(DateTime.Now, values);
+
+                    // 성공 훅(TCP polling)
+                    NotifyCommSuccess();
                     return;
                 }
 
@@ -132,9 +135,13 @@ namespace ModbusTester
 
                 RegisterCache.UpdateRange(start, result.Values);
                 _recService.AppendSnapshotIfDue(DateTime.Now, result.Values);
+
+                // 성공 훅(RTU polling)
+                NotifyCommSuccess();
             }
             catch (Exception ex)
             {
+                // 기존 폴링 실패 카운트/로그 유지
                 _pollFailCount++;
                 _lastPollErr = ex.GetType().Name + ": " + ex.Message;
 
@@ -145,6 +152,9 @@ namespace ModbusTester
                     _lastPollErrLogAt = now;
                     Log($"[POLL ERR] fail={_pollFailCount}, {_lastPollErr}");
                 }
+
+                // 재연결용 실패 훅(폴링 실패도 통신 실패로 누적)
+                NotifyCommFailure(ex);
 
                 // (선택) 너무 많이 실패하면 자동 Stop (원하면 켜자)
                 // if (_pollFailCount >= 10) { pollTimer.Stop(); Log("[POLL] auto stop (too many fails)"); }

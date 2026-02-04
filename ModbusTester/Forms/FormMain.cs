@@ -11,6 +11,7 @@ using System.Globalization;
 using System.IO;
 using System.IO.Ports;
 using System.Linq;
+using System.Net;
 using System.Net.Sockets;
 using System.Threading.Tasks;
 using System.Windows.Forms;
@@ -22,15 +23,31 @@ namespace ModbusTester
     {
         // ===== TCP mode fields =====
         private readonly bool _tcpMode;
-        private readonly TcpClient? _tcpClient;
-        private readonly IModbusMaster? _tcpMaster;
+
+        // 재연결 시 교체가 필요하므로 readonly 제거
+        private TcpClient? _tcpClient;
+        private IModbusMaster? _tcpMaster;
+
         private readonly byte _tcpUnitId;
+
+        // TCP 재연결에 필요한 호스트/포트 캐시(가능하면 TcpClient RemoteEndPoint에서 초기 추출)
+        private string? _tcpHost;
+        private int _tcpPort;
 
         private bool _isOpen =>
             !_slaveMode && (
                 (_sp != null && _sp.IsOpen)
                 || (_tcpMode && _tcpMaster != null)
             );
+
+        // ===== Auto Reconnect (RTU/TCP) =====
+        private int _failCount = 0;
+        private bool _reconnectMode = false;
+        private bool _closing = false;
+
+        private readonly System.Windows.Forms.Timer _reconnectTimer = new System.Windows.Forms.Timer();
+        private const int FAIL_THRESHOLD = 3;
+        private const int RECONNECT_INTERVAL_MS = 2000;
 
         // 컬럼 인덱스
         private const int COL_REG = 0;
@@ -64,7 +81,15 @@ namespace ModbusTester
         // Preset 실행 분리 객체
         private PresetRunner? _presetRunner;
 
-        public FormMain(SerialPort? sp, ModbusSlave? slave, bool slaveMode, byte slaveId, TcpClient? tcpClient = null, IModbusMaster? tcpMaster = null, bool tcpMode = false, byte tcpUnitId = 1)
+        public FormMain(
+            SerialPort? sp,
+            ModbusSlave? slave,
+            bool slaveMode,
+            byte slaveId,
+            TcpClient? tcpClient = null,
+            IModbusMaster? tcpMaster = null,
+            bool tcpMode = false,
+            byte tcpUnitId = 1)
         {
             InitializeComponent();
 
@@ -86,6 +111,9 @@ namespace ModbusTester
             _tcpMaster = tcpMaster;
             _tcpMode = tcpMode;
             _tcpUnitId = tcpUnitId;
+
+            // TCP 재연결용 host/port 캐시(가능하면 RemoteEndPoint에서 추출)
+            CacheTcpEndpointFromClient(_tcpClient);
 
             ApplyCommModeUiState();
 
@@ -137,8 +165,37 @@ namespace ModbusTester
                 }
             }
 
+            // ===== Auto Reconnect timer init =====
+            _reconnectTimer.Interval = RECONNECT_INTERVAL_MS;
+            _reconnectTimer.Tick += (_, __) => TryReconnectOnce();
+
+            // 폼 닫히면 재연결 루프 중단
+            this.FormClosing += FormMain_FormClosing;
+
             Shown += FormMain_Shown;
             numSlave.Value = slaveId;
+        }
+
+        private void FormMain_FormClosing(object? sender, FormClosingEventArgs e)
+        {
+            _closing = true;
+            try { _reconnectTimer.Stop(); } catch { }
+        }
+
+        private void CacheTcpEndpointFromClient(TcpClient? client)
+        {
+            try
+            {
+                if (client?.Client?.RemoteEndPoint is IPEndPoint ep)
+                {
+                    _tcpHost = ep.Address.ToString();
+                    _tcpPort = ep.Port;
+                }
+            }
+            catch
+            {
+                // ignore
+            }
         }
 
         private async void FormMain_Shown(object? sender, EventArgs e)
@@ -329,8 +386,171 @@ namespace ModbusTester
         private void cmbFunctionCode_SelectedIndexChanged(object sender, EventArgs e) => RefreshDataCount();
         private void cmbFunctionCode_TextChanged(object sender, EventArgs e) => RefreshDataCount();
 
-        // ───────────────────── RX 헤더 업데이트 ─────────────────────
+        // ───────────────────── Auto Reconnect: public hook ─────────────────────
+        // 실제 Modbus 요청 성공/실패 지점에서 아래 두 메서드만 호출하면 됨.
+        // - 성공: NotifyCommSuccess()
+        // - 예외/무응답/타임아웃: NotifyCommFailure(ex)
+        public void NotifyCommSuccess()
+        {
+            _failCount = 0;
 
+            if (_reconnectMode)
+            {
+                _reconnectMode = false;
+                try { _reconnectTimer.Stop(); } catch { }
+                Log("[RECONNECT] 성공 → 정상 상태로 복귀");
+            }
+        }
+
+        public void NotifyCommFailure(Exception ex)
+        {
+            if (_closing) return;
+            if (_slaveMode) return;
+
+            _failCount++;
+            Log($"[COMM] 실패({_failCount}/{FAIL_THRESHOLD}): {ex.Message}");
+
+            if (_failCount >= FAIL_THRESHOLD)
+                EnterReconnectMode();
+        }
+
+        private void EnterReconnectMode()
+        {
+            if (_closing) return;
+            if (_reconnectMode) return;
+            if (_slaveMode) return;
+
+            _reconnectMode = true;
+            Log("[RECONNECT] failCount>=5 → Reconnect 모드 진입");
+
+            // 중복 통신 방지: Polling이 돌고 있으면 멈춤(있을 때만)
+            try { pollTimer.Stop(); } catch { }
+
+            // 즉시 1회 시도 + 이후 3초마다 재시도
+            TryReconnectOnce();
+            try { _reconnectTimer.Start(); } catch { }
+        }
+
+        private void TryReconnectOnce()
+        {
+            if (_closing) return;
+            if (!_reconnectMode) return;
+            if (_slaveMode) return;
+
+            if (_tcpMode)
+            {
+                TryReconnectTcp();
+                return;
+            }
+
+            TryReconnectRtu();
+        }
+
+        private void TryReconnectRtu()
+        {
+            if (_sp == null)
+            {
+                Log("[RECONNECT] RTU: SerialPort=null → 재연결 불가");
+                return;
+            }
+
+            try
+            {
+                Log("[RECONNECT] RTU: Close → Open 재시도");
+
+                if (_sp.IsOpen)
+                    _sp.Close();
+
+                _sp.Open();
+
+                if (_sp.IsOpen)
+                {
+                    Log("[RECONNECT] RTU: Open 성공");
+                    NotifyCommSuccess();
+                }
+                else
+                {
+                    Log("[RECONNECT] RTU: Open 실패(IsOpen=false)");
+                }
+            }
+            catch (Exception ex)
+            {
+                Log("[RECONNECT] RTU 실패: " + ex.Message);
+            }
+        }
+
+        private void TryReconnectTcp()
+        {
+            // host/port가 없으면 재연결 불가
+            if (string.IsNullOrWhiteSpace(_tcpHost) || _tcpPort <= 0)
+            {
+                // 혹시 기존 client에서 다시 캐시 시도
+                CacheTcpEndpointFromClient(_tcpClient);
+
+                if (string.IsNullOrWhiteSpace(_tcpHost) || _tcpPort <= 0)
+                {
+                    Log("[RECONNECT] TCP: host/port 정보가 없어 재연결 불가");
+                    return;
+                }
+            }
+
+            try
+            {
+                Log("[RECONNECT] TCP: Dispose/Close → Connect 재시도(+ Master 재생성)");
+
+                // 기존 정리
+                try { _tcpMaster?.Dispose(); } catch { }
+                try { _tcpClient?.Close(); } catch { }
+
+                // 새 연결
+                var newClient = new TcpClient();
+                newClient.Connect(_tcpHost!, _tcpPort);
+
+                // 새 Master 생성(NModbus)
+                var factory = new ModbusFactory();
+                var newMaster = factory.CreateMaster(newClient);
+
+                // 교체
+                _tcpClient = newClient;
+                _tcpMaster = newMaster;
+
+                // PresetRunner가 TCP Master를 잡고 있으면 재생성 필요
+                RebuildPresetRunnerForTcpIfNeeded();
+
+                Log("[RECONNECT] TCP: Connect 성공");
+                NotifyCommSuccess();
+            }
+            catch (Exception ex)
+            {
+                Log("[RECONNECT] TCP 실패: " + ex.Message);
+            }
+        }
+
+        private void RebuildPresetRunnerForTcpIfNeeded()
+        {
+            if (_slaveMode) return;
+            if (!_tcpMode) return;
+            if (_tcpMaster == null) return;
+
+            try
+            {
+                IModbusMasterService masterService = new TcpModbusMasterService(_tcpMaster);
+
+                _presetRunner = new PresetRunner(
+                    masterService,
+                    _gridController,
+                    Log,
+                    UpdateReceiveHeader,
+                    (start, values) => RegisterCache.UpdateRange(start, values)
+                );
+            }
+            catch (Exception ex)
+            {
+                Log("[RECONNECT] PresetRunner 재생성 실패: " + ex.Message);
+            }
+        }
+
+        // ───────────────────── RX 헤더 업데이트 ─────────────────────
         private void UpdateReceiveHeader(byte[] resp, byte slave, byte fc, ushort start, ushort count)
         {
             txtRxSlave.Text = slave.ToString();
